@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self' ws: blob: data:"
+    />
+    <title>Unstuck</title>
+  </head>
+  <body>
+    <header id="toolbar">
+      <button id="openBtn" class="btn primary" title="Open a PDF (⌘O)">Open PDF</button>
+      <button id="libraryBtn" class="btn" title="Saved papers (⌘L)">Library ▾</button>
+      <span id="fileName" class="file-name">No paper open</span>
+      <div class="spacer"></div>
+      <span id="pageInfo" class="muted"></span>
+      <div class="zoom">
+        <button id="zoomOut" class="btn icon" title="Zoom out" disabled>−</button>
+        <span id="zoomLabel" class="muted">—</span>
+        <button id="zoomIn" class="btn icon" title="Zoom in" disabled>+</button>
+        <button id="fitWidth" class="btn" title="Fit to width" disabled>Fit</button>
+      </div>
+      <button id="panelBtn" class="btn icon panel-toggle" title="Show/hide explanation panel (⌘\)" aria-pressed="true">▥</button>
+      <input id="fileInput" type="file" accept="application/pdf,.pdf" hidden />
+    </header>
+
+    <div id="libraryPanel" class="library-panel" hidden>
+      <div class="lp-head">Saved papers</div>
+      <ul id="libraryList" class="paper-list"></ul>
+    </div>
+
+    <main id="stage">
+      <div id="viewerContainer">
+        <div id="viewer" class="pdfViewer"></div>
+      </div>
+      <div id="emptyState" hidden>
+        <div class="empty-card">
+          <h1>Unstuck</h1>
+          <p>Open a paper, then select any passage you're stuck on.</p>
+          <button id="emptyOpenBtn" class="btn primary">Open PDF</button>
+          <p class="muted small">or drop a PDF anywhere in this window · ⌘O</p>
+          <div id="recentBox" class="recent" hidden>
+            <div class="recent-title">Recent papers</div>
+            <ul id="recentList" class="paper-list"></ul>
+          </div>
+        </div>
+      </div>
+      <aside id="sidePanel">
+        <div id="panelEmpty" class="panel-empty">
+          <div class="pe-icon">✎</div>
+          <p><strong>Stuck on something?</strong></p>
+          <p class="muted">Select a passage or an equation in the paper. An easier explanation, an example and evidence from the paper will appear here.</p>
+          <p class="muted small">Drag to select · double-click a word · Esc to clear</p>
+        </div>
+      </aside>
+      <div id="dropOverlay" hidden>Drop the PDF to open it</div>
+    </main>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

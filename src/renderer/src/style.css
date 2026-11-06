@@ -1,0 +1,629 @@
+:root {
+  --bg: #f4f4f2;
+  --surface: #ffffff;
+  --text: #1f1f1d;
+  --muted: #6b6b66;
+  --border: #e2e1dc;
+  --accent: #2f6fde;
+  --accent-soft: rgba(47, 111, 222, 0.12);
+  --hl: rgba(255, 196, 0, 0.35);
+  --shadow: 0 10px 30px rgba(20, 20, 18, 0.14), 0 2px 6px rgba(20, 20, 18, 0.08);
+  --toolbar-h: 48px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo', sans-serif;
+  color: var(--text);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* pdf.js sizes pages assuming content-box (pages have a 9px border). With
+   border-box the text layer ends up ~2% larger than the canvas, so selection
+   boxes drift down and right the further they are from the page's top-left. */
+.pdfViewer,
+.pdfViewer * {
+  box-sizing: content-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+/* ---------- Toolbar ---------- */
+#toolbar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: var(--toolbar-h);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  z-index: 10;
+  font-size: 13px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.file-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 45vw;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 12px;
+}
+
+.zoom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#zoomLabel {
+  min-width: 44px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.btn {
+  font: inherit;
+  font-size: 13px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: #f0efeb;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.btn.icon {
+  width: 30px;
+  padding: 0;
+  font-size: 16px;
+}
+
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.btn.primary:hover {
+  background: #2760c4;
+}
+
+/* ---------- Library ---------- */
+.library-panel {
+  position: fixed;
+  top: calc(var(--toolbar-h) - 4px);
+  left: 112px;
+  width: 360px;
+  max-height: 60vh;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  z-index: 30;
+  padding: 6px;
+}
+
+.library-panel[hidden] {
+  display: none;
+}
+
+.lp-head {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 6px 8px 4px;
+}
+
+.paper-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.paper-item {
+  display: flex;
+  align-items: center;
+  border-radius: 7px;
+}
+
+.paper-item:hover,
+.paper-item.current {
+  background: #f0efeb;
+}
+
+.paper-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 7px 8px;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.paper-name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.paper-item.current .paper-name {
+  color: var(--accent);
+}
+
+.paper-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.paper-remove {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.paper-item:hover .paper-remove {
+  opacity: 1;
+}
+
+.paper-remove:hover {
+  background: #e4e3de;
+  color: var(--text);
+}
+
+.paper-empty {
+  padding: 10px 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.recent {
+  margin-top: 22px;
+  width: 340px;
+  text-align: left;
+}
+
+.recent[hidden] {
+  display: none;
+}
+
+.recent-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 0 8px 4px;
+}
+
+/* ---------- Viewer ---------- */
+#stage {
+  position: absolute;
+  inset: var(--toolbar-h) 0 0 0;
+}
+
+/* pdf.js requires an absolutely positioned scroll container. */
+#viewerContainer {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+}
+
+#emptyState {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+}
+
+#emptyState[hidden] {
+  display: none;
+}
+
+.empty-card {
+  text-align: center;
+  padding: 40px 48px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.empty-card h1 {
+  margin: 0 0 8px;
+  font-size: 26px;
+}
+
+.empty-card p {
+  margin: 0 0 18px;
+}
+
+.empty-card .small {
+  margin: 14px 0 0;
+}
+
+#dropOverlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(47, 111, 222, 0.1);
+  border: 3px dashed var(--accent);
+  color: var(--accent);
+  font-size: 20px;
+  font-weight: 600;
+  z-index: 50;
+  pointer-events: none;
+}
+
+#dropOverlay[hidden] {
+  display: none;
+}
+
+/* ---------- Selection highlight + popup ---------- */
+/* Selection can start anywhere on a page, margins included. */
+.pdfViewer .page {
+  cursor: text;
+}
+.stuck-highlights {
+  position: absolute;
+  inset: 0 auto auto 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.stuck-hl {
+  position: absolute;
+  background: var(--hl);
+  border-radius: 2px;
+  mix-blend-mode: multiply;
+}
+
+/* ---------- Side panel ---------- */
+:root {
+  --panel-w: clamp(320px, 32vw, 460px);
+}
+
+#sidePanel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--panel-w);
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 8;
+}
+
+body:not(.panel-closed) #viewerContainer {
+  right: var(--panel-w);
+}
+
+body.panel-closed #sidePanel {
+  display: none;
+}
+
+.panel-toggle[aria-pressed='true'] {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.panel-empty {
+  margin: auto;
+  padding: 24px 28px;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.panel-empty[hidden] {
+  display: none;
+}
+
+.panel-empty p {
+  margin: 0 0 8px;
+}
+
+.pe-icon {
+  font-size: 26px;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.stuck-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.stuck-card[hidden] {
+  display: none;
+}
+
+.stuck-card .sp-tag {
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.sp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.sp-tag {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.sp-close {
+  border: none;
+  background: none;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.sp-quote {
+  margin: 0 0 10px;
+  padding: 6px 10px;
+  border-left: 3px solid #f0c000;
+  background: #fbf8ec;
+  color: #4a4a44;
+  font-size: 12.5px;
+  max-height: 96px;
+  overflow: auto;
+}
+
+.sp-capture {
+  margin: 0 0 10px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.sp-capture img {
+  display: block;
+  max-width: 100%;
+  max-height: 160px;
+  margin: 0 auto;
+  object-fit: contain;
+}
+
+.sp-capture figcaption {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.sp-placeholder {
+  margin: 0;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* ---------- Explanation ---------- */
+.sp-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0 -16px;
+  padding: 0 16px 16px;
+}
+
+.sp-thinking {
+  margin: 4px 0;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sp-thinking .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.25;
+    transform: scale(0.7);
+  }
+}
+
+.sp-answer h4 {
+  margin: 12px 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+
+.sp-answer h4:first-child {
+  margin-top: 2px;
+}
+
+.sp-answer p {
+  margin: 0 0 6px;
+}
+
+.sp-answer ul {
+  margin: 0 0 6px;
+  padding-left: 18px;
+}
+
+.sp-answer code {
+  font-size: 12px;
+  background: #f0efeb;
+  padding: 0 4px;
+  border-radius: 4px;
+}
+
+.sp-answer .math-block {
+  overflow-x: auto;
+  margin: 4px 0 8px;
+}
+
+.sp-answer .katex {
+  font-size: 1.05em;
+}
+
+.cite {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: none;
+  border-radius: 999px;
+  padding: 0 7px;
+  margin: 0 1px;
+  cursor: pointer;
+  vertical-align: 1px;
+}
+
+.cite:hover {
+  background: rgba(47, 111, 222, 0.22);
+}
+
+.sp-answer li.evidence {
+  list-style: none;
+  margin: 0 0 6px -18px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  align-items: baseline;
+}
+
+.sp-answer li.evidence:hover {
+  background: #f7f6f2;
+}
+
+.ev-status {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  background: #ecebe6;
+  flex: none;
+  align-self: center;
+}
+
+.ev-status.ok {
+  color: #fff;
+  background: #2e9e5b;
+}
+
+.ev-status.bad {
+  color: #fff;
+  background: #d9822b;
+}
+
+.ev-quote {
+  flex-basis: 100%;
+  font-size: 12.5px;
+  color: #4a4a44;
+  font-style: italic;
+}
+
+.sp-error {
+  margin: 4px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fdf1e7;
+  color: #8a4a12;
+  font-size: 12.5px;
+}
+
+/* Flash shown when jumping to a citation. */
+.flash-layer {
+  position: absolute;
+  inset: 0 auto auto 0;
+  pointer-events: none;
+  z-index: 6;
+  transition: opacity 0.8s;
+}
+
+.flash-layer.fade {
+  opacity: 0;
+}
+
+.flash-hl {
+  position: absolute;
+  background: rgba(47, 111, 222, 0.28);
+  border-radius: 2px;
+  mix-blend-mode: multiply;
+}

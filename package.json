@@ -1,0 +1,26 @@
+{
+  "name": "unstuck",
+  "version": "0.1.0",
+  "description": "A context-aware PDF reader that explains the exact passage where you get stuck",
+  "main": "./out/main/index.js",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev --watch",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "try": "node --no-warnings scripts/try-explain.mts"
+  },
+  "devDependencies": {
+    "@types/katex": "^0.16.7",
+    "@types/node": "^22.10.2",
+    "electron": "^33.2.1",
+    "electron-vite": "^2.3.0",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  },
+  "dependencies": {
+    "katex": "^0.16.11",
+    "pdfjs-dist": "^4.8.69"
+  }
+}
