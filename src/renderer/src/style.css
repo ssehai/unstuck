@@ -868,11 +868,9 @@ body.panel-closed #sidePanel {
 
 .stuck-marker {
   position: absolute;
-  width: 10px;
-  height: 10px;
   padding: 0;
   border-radius: 50%;
-  border: 2px solid #fff;
+  border: 1.5px solid #fff;
   background: #e0912f;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
   cursor: pointer;
@@ -953,4 +951,8 @@ body.panel-closed #sidePanel {
 
 .sp-note.stale .sp-note-head {
   color: var(--muted);
+}
+
+.unstuck-overlay .stuck-marker {
+  box-sizing: border-box; /* the border stays inside the line-sized dot */
 }

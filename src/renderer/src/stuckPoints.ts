@@ -21,7 +21,14 @@ interface Spot {
   top: number
   bottom: number
   left: number
+  /** Page height / width, to make the dot round in percent units. */
+  aspect: number
 }
+
+/** Dot diameter relative to the passage's line height (stays within the line). */
+const DOT_OF_LINE = 0.85
+/** Gap between the dot and the text, relative to the dot size. */
+const GAP_OF_DOT = 0.6
 
 export class StuckPoints {
   private records: StuckRecord[] = []
@@ -115,7 +122,8 @@ export class StuckPoints {
         page: rec.page,
         top: boxes[0].top,
         bottom: boxes[0].top + boxes[0].height,
-        left: Math.min(...boxes.map((b) => b.left))
+        left: Math.min(...boxes.map((b) => b.left)),
+        aspect: pageEl.clientHeight / pageEl.clientWidth
       })
     }
 
@@ -127,9 +135,18 @@ export class StuckPoints {
       const m = document.createElement('button')
       m.className = `stuck-marker ${rec.status}`
       m.title = rec.status === 'understood' ? '이해한 곳 · 노트 보기' : '막혔던 곳 · 대화 다시 보기'
-      // 18px left of the passage, vertically centred on its first line.
-      m.style.left = `max(4px, calc(${s.left * 100}% - 18px))`
-      m.style.top = `calc(${((s.top + s.bottom) / 2) * 100}% - 5px)`
+      // Sized from the first line's height, all in percent of the page, so the
+      // dot scales with the text when zooming. Left of the passage, centred
+      // on its first line.
+      const h = (s.bottom - s.top) * DOT_OF_LINE // fraction of page height
+      const w = h * s.aspect // the same length as a fraction of page width
+      const left = Math.max(0.004, s.left - w * (1 + GAP_OF_DOT))
+      Object.assign(m.style, {
+        left: `${left * 100}%`,
+        top: `${((s.top + s.bottom) / 2 - h / 2) * 100}%`,
+        width: `${w * 100}%`,
+        height: `${h * 100}%`
+      })
       m.addEventListener('mousedown', (e) => e.stopPropagation()) // not a text selection
       m.addEventListener('click', () => this.deps.open(rec))
       overlay.appendChild(m)
