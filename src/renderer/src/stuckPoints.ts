@@ -6,6 +6,7 @@
 import { selectionBoxes } from './lineModel'
 import { findInPage } from './locate'
 import { renderMarkdown } from './markdown'
+import { clearOverlays, pageOverlay, toPageBoxes } from './overlay'
 import type { NotesStore, StuckRecord } from './notes'
 
 interface Deps {
@@ -26,13 +27,7 @@ export class StuckPoints {
   private records: StuckRecord[] = []
   private paperId: string | null = null
   private spots = new Map<string, Spot>()
-  private readonly layer: HTMLDivElement
-
-  constructor(private readonly deps: Deps) {
-    this.layer = document.createElement('div')
-    this.layer.className = 'marker-layer'
-    deps.container.appendChild(this.layer)
-  }
+  constructor(private readonly deps: Deps) {}
 
   async load(paperId: string): Promise<void> {
     this.paperId = paperId
@@ -101,7 +96,11 @@ export class StuckPoints {
   }
 
   // --- Margin markers -------------------------------------------------------------
-  /** Finds passages on pages whose text layer is ready, then draws all markers. */
+  /**
+   * Finds passages on pages whose text layer is ready, then draws a dot in the
+   * margin next to each. Dots live in the page's text layer, positioned in
+   * percent, so they move smoothly with pinch-zoom.
+   */
   renderMarkers(): void {
     const c = this.deps.container
     for (const rec of this.records) {
@@ -110,38 +109,30 @@ export class StuckPoints {
       if (!pageEl?.querySelector('.textLayer span')) continue
       const range = findInPage(pageEl, rec.quote)
       if (!range) continue
-      const boxes = selectionBoxes(range, c)
+      const boxes = toPageBoxes(selectionBoxes(range, c), c).filter((b) => b.page === rec.page)
       if (boxes.length === 0) continue
-      const p = pageEl.getBoundingClientRect()
       this.spots.set(rec.id, {
         page: rec.page,
-        top: (boxes[0].top - p.top) / p.height,
-        bottom: (boxes[0].bottom - p.top) / p.height,
-        left: (Math.min(...boxes.map((b) => b.left)) - p.left) / p.width
+        top: boxes[0].top,
+        bottom: boxes[0].top + boxes[0].height,
+        left: Math.min(...boxes.map((b) => b.left))
       })
     }
 
-    const view = c.getBoundingClientRect()
-    this.layer.replaceChildren(
-      ...this.records.flatMap((rec) => {
-        const s = this.spots.get(rec.id)
-        const pageEl = s && c.querySelector<HTMLElement>(`.page[data-page-number="${s.page}"]`)
-        if (!s || !pageEl) return []
-        const p = pageEl.getBoundingClientRect()
-        const size = 10
-        const x = Math.max(p.left + 4, p.left + s.left * p.width - size - 8)
-        const y = p.top + ((s.top + s.bottom) / 2) * p.height - size / 2
-        const m = document.createElement('button')
-        m.className = `stuck-marker ${rec.status}`
-        m.title = rec.status === 'understood' ? '이해한 곳 · 노트 보기' : '막혔던 곳 · 대화 다시 보기'
-        Object.assign(m.style, {
-          left: `${x - view.left + c.scrollLeft}px`,
-          top: `${y - view.top + c.scrollTop}px`
-        })
-        m.addEventListener('mousedown', (e) => e.stopPropagation()) // not a text selection
-        m.addEventListener('click', () => this.deps.open(rec))
-        return [m]
-      })
-    )
+    clearOverlays(c, 'markers')
+    for (const rec of this.records) {
+      const s = this.spots.get(rec.id)
+      const overlay = s && pageOverlay(c, s.page, 'markers')
+      if (!s || !overlay) continue
+      const m = document.createElement('button')
+      m.className = `stuck-marker ${rec.status}`
+      m.title = rec.status === 'understood' ? '이해한 곳 · 노트 보기' : '막혔던 곳 · 대화 다시 보기'
+      // 18px left of the passage, vertically centred on its first line.
+      m.style.left = `max(4px, calc(${s.left * 100}% - 18px))`
+      m.style.top = `calc(${((s.top + s.bottom) / 2) * 100}% - 5px)`
+      m.addEventListener('mousedown', (e) => e.stopPropagation()) // not a text selection
+      m.addEventListener('click', () => this.deps.open(rec))
+      overlay.appendChild(m)
+    }
   }
 }

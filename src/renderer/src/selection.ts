@@ -1,5 +1,6 @@
 import { installDragSelect } from './dragSelect'
 import { selectionBoxes, type Box } from './lineModel'
+import { clearOverlays, pageOverlay, placeBox, toPageBoxes, type PageBox } from './overlay'
 import { rangeText, snapToWords } from './textGeometry'
 
 /** A passage the user selected in the PDF. */
@@ -22,7 +23,8 @@ export class SelectionPopup {
   private readonly container: HTMLElement
   private readonly card: HTMLDivElement
   private readonly emptyHint: HTMLElement | null
-  private readonly highlights: HTMLDivElement
+  /** The highlight, as page fractions; drawn inside each page's text layer. */
+  private hl: PageBox[] = []
   private current: StuckSelection | null = null
   onSelect?: (sel: StuckSelection, body: HTMLElement) => void
   onHide?: () => void
@@ -30,10 +32,6 @@ export class SelectionPopup {
 
   constructor(container: HTMLElement, panel: HTMLElement) {
     this.container = container
-
-    this.highlights = document.createElement('div')
-    this.highlights.className = 'stuck-highlights'
-    container.appendChild(this.highlights)
 
     this.emptyHint = panel.querySelector('.panel-home')
     this.card = document.createElement('div')
@@ -66,21 +64,23 @@ export class SelectionPopup {
     if (!this.card.hidden) this.onHide?.()
     this.card.hidden = true
     if (this.emptyHint) this.emptyHint.hidden = false
-    this.highlights.replaceChildren()
+    this.hl = []
+    this.renderHighlights()
     this.current = null
   }
 
   /**
-   * Redraws the highlight for the current selection, e.g. after a zoom.
-   * The explanation in the panel is kept.
+   * Redraws the stored highlight (e.g. after a cancelled drag, or when pdf.js
+   * re-created a page's text layer). Zooming needs nothing: the boxes are in
+   * percent of the page and scale with it.
    */
   refreshHighlight(): void {
-    const r = this.current?.range
-    if (!r || !r.startContainer.isConnected || !r.endContainer.isConnected) {
-      this.highlights.replaceChildren()
-      return
-    }
-    this.drawHighlights(selectionBoxes(r, this.container))
+    this.renderHighlights()
+  }
+
+  /** Highlights a saved passage (reopened from the stuck-point list). */
+  showSavedHighlight(range: Range): void {
+    this.drawHighlights(selectionBoxes(range, this.container))
   }
 
   /** Live highlight while dragging, already snapped to whole words. */
@@ -116,7 +116,8 @@ export class SelectionPopup {
   openSaved(info: { text: string; pageStart: number; pageEnd: number }, locate: () => void, fill: (body: HTMLElement) => void): void {
     if (!this.card.hidden) this.onHide?.()
     this.current = null
-    this.highlights.replaceChildren()
+    this.hl = []
+    this.renderHighlights()
     this.locate = locate
     this.render(info, fill)
   }
@@ -142,33 +143,28 @@ export class SelectionPopup {
 
   /** Brings the highlighted passage back into view. */
   private scrollToSelection(): void {
-    const first = this.highlights.firstElementChild as HTMLElement | null
+    const first = this.container.querySelector<HTMLElement>('.uo-hl .stuck-hl')
     if (!first) return
-    this.container.scrollTo({ top: Math.max(0, first.offsetTop - this.container.clientHeight / 3), behavior: 'smooth' })
-  }
-
-  /** Content coordinates = viewport coordinates shifted by the container's scroll. */
-  private toContent(x: number, y: number): { x: number; y: number } {
     const c = this.container.getBoundingClientRect()
-    return { x: x - c.left + this.container.scrollLeft, y: y - c.top + this.container.scrollTop }
+    const top = first.getBoundingClientRect().top - c.top + this.container.scrollTop
+    this.container.scrollTo({ top: Math.max(0, top - this.container.clientHeight / 3), behavior: 'smooth' })
   }
 
   private drawHighlights(boxes: Box[]): void {
-    const PAD = 1 // a hair of breathing room around the glyphs
-    this.highlights.replaceChildren(
-      ...boxes.map((b) => {
-        const p = this.toContent(b.left - PAD, b.top - PAD)
-        const d = document.createElement('div')
-        d.className = 'stuck-hl'
-        Object.assign(d.style, {
-          left: `${p.x}px`,
-          top: `${p.y}px`,
-          width: `${b.right - b.left + PAD * 2}px`,
-          height: `${b.bottom - b.top + PAD * 2}px`
-        })
-        return d
-      })
-    )
+    this.hl = toPageBoxes(boxes, this.container)
+    this.renderHighlights()
+  }
+
+  private renderHighlights(): void {
+    clearOverlays(this.container, 'hl')
+    for (const b of this.hl) {
+      const overlay = pageOverlay(this.container, b.page, 'hl')
+      if (!overlay) continue
+      const d = document.createElement('div')
+      d.className = 'stuck-hl'
+      placeBox(d, b, 1) // a hair of breathing room around the glyphs
+      overlay.appendChild(d)
+    }
   }
 }
 

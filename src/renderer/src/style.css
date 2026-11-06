@@ -926,3 +926,31 @@ body.panel-closed #sidePanel {
 .sp-note-body p {
   margin: 0 0 4px;
 }
+
+/* Overlays inside each page, above canvas and text layer (see overlay.ts). */
+.unstuck-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.unstuck-overlay .stuck-marker {
+  pointer-events: auto;
+}
+
+.chip.got-it.done {
+  background: #2e9e5b;
+  border-color: #2e9e5b;
+  color: #fff;
+}
+
+.sp-note.stale {
+  border-color: var(--border);
+  background: #f7f6f2;
+  opacity: 0.8;
+}
+
+.sp-note.stale .sp-note-head {
+  color: var(--muted);
+}

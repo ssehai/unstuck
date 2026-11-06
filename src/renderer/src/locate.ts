@@ -81,21 +81,26 @@ const nextFrame = (): Promise<void> =>
     setTimeout(r, 60)
   })
 
+/**
+ * Brings `quote` on `page` into view. Returns the quote's range (or null).
+ * With `flash: false` nothing is flashed, e.g. when the caller highlights it.
+ */
 export async function jumpTo(
   reader: Reader,
   container: HTMLElement,
   page: number,
-  quote?: string
-): Promise<boolean> {
+  quote?: string,
+  opts: { flash?: boolean } = {}
+): Promise<Range | null> {
   reader.goToPage(page)
   await reader.waitForTextLayer(page)
   const pageEl = container.querySelector<HTMLElement>(`.page[data-page-number="${page}"]`)
-  if (!pageEl || !quote) return false
+  if (!pageEl || !quote) return null
   const range = findInPage(pageEl, quote)
-  if (!range) return false
+  if (!range) return null
 
   const focus = focusArea(range, container, pageEl)
-  if (!focus) return false
+  if (!focus) return null
 
   // Remember everything as fractions of the page, so it survives the zoom
   // (pdf.js re-lays out and may scroll on its own when the scale changes).
@@ -135,6 +140,7 @@ export async function jumpTo(
   place() // again, in case pdf.js adjusted the scroll after the zoom
 
   // 3) Flash the quote itself.
+  if (opts.flash === false) return range
   const p = pageEl.getBoundingClientRect()
   flash(
     container,
@@ -145,7 +151,7 @@ export async function jumpTo(
       bottom: p.top + b.bottom * p.height
     }))
   )
-  return true
+  return range
 }
 
 function flash(container: HTMLElement, boxes: Box[]): void {

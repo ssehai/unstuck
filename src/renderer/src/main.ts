@@ -35,10 +35,8 @@ function setPanel(open: boolean): void {
   } catch {
     /* storage unavailable: fine */
   }
-  // The viewer changed width: let pdf.js refit, then redraw the highlight.
+  // The viewer changed width: let pdf.js refit (overlays follow on their own).
   window.dispatchEvent(new Event('resize'))
-  setTimeout(() => popup.refreshHighlight(), 300)
-  refreshMarkersSoon()
 }
 panelBtn.addEventListener('click', () => setPanel(document.body.classList.contains('panel-closed')))
 try {
@@ -68,18 +66,24 @@ popup.onHide = () => {
   cancelExplain = null
 }
 const openStuck = (rec: StuckRecord): void => {
-  const locate = (): void => void jumpTo(reader, container, rec.page, rec.quote)
-  popup.openSaved({ text: rec.quote, pageStart: rec.page, pageEnd: rec.pageEnd }, locate, (body) => {
+  // Go to the passage and show it highlighted, as when it was first selected.
+  const locate = async (): Promise<void> => {
+    const range = await jumpTo(reader, container, rec.page, rec.quote, { flash: false })
+    if (!range || !popup.cardOpen) return
+    popup.showSavedHighlight(range)
+    // Right after a zoom the page may still be re-rendering; measure again
+    // once it has, so the highlight hugs the glyphs exactly.
+    setTimeout(() => {
+      if (popup.cardOpen && !popup.selection && range.startContainer.isConnected) popup.showSavedHighlight(range)
+    }, 700)
+  }
+  popup.openSaved({ text: rec.quote, pageStart: rec.page, pageEnd: rec.pageEnd }, () => void locate(), (body) => {
     cancelExplain?.()
     cancelExplain = startConversation({ record: rec }, body, conversationDeps())
   })
   locate()
 }
 const stuck = new StuckPoints({ container, store: notesStore, open: openStuck })
-const refreshMarkersSoon = (): void => {
-  setTimeout(() => stuck.renderMarkers(), 150)
-  setTimeout(() => stuck.renderMarkers(), 700)
-}
 
 const reader = new Reader(container, $<HTMLDivElement>('viewer'), {
   onPageChange: (page, total) => {
@@ -88,13 +92,14 @@ const reader = new Reader(container, $<HTMLDivElement>('viewer'), {
   },
   onScaleChange: (scale) => {
     zoomLabel.textContent = `${Math.round(scale * 100)}%`
-    // Highlight positions are stale after a zoom; redraw once pages re-render.
-    setTimeout(() => popup.refreshHighlight(), 150)
-    setTimeout(() => popup.refreshHighlight(), 700)
-    refreshMarkersSoon()
+    // Highlights and markers are in percent of the page: nothing to redo.
     saveViewSoon()
   },
-  onTextLayer: () => stuck.renderMarkers()
+  // pdf.js (re)created a page's text layer: put our overlays back on it.
+  onTextLayer: () => {
+    popup.refreshHighlight()
+    stuck.renderMarkers()
+  }
 })
 
 // --- Remember where the reader is in each paper ---------------------------------

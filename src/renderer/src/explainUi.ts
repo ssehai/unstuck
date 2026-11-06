@@ -64,6 +64,16 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
     </div>`
   body.after(composer)
   const input = composer.querySelector('textarea')!
+  const gotItBtn = composer.querySelector<HTMLButtonElement>('.got-it')!
+  /** Shows whether this passage is marked as understood. */
+  const syncGotIt = (): void => {
+    const done = record?.status === 'understood'
+    gotItBtn.classList.toggle('done', done)
+    gotItBtn.textContent = done ? '이해함 ✓' : '이해했음 ✓'
+    gotItBtn.title = done
+      ? '이미 노트로 정리했어요. 이어서 질문하면 다시 "진행 중"이 돼요.'
+      : '이해했어요: 대화를 짧은 노트로 정리해 저장해요'
+  }
   const setBusy = (b: boolean): void => {
     busy = b
     composer.querySelectorAll('button').forEach((x) => (x.disabled = b))
@@ -102,8 +112,10 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
     return block
   }
 
-  const showNote = (markdown: string): void => {
-    noteSlot.innerHTML = `<div class="sp-note"><div class="sp-note-head">✓ 이해한 내용 노트</div><div class="sp-note-body"></div></div>`
+  const showNote = (markdown: string, stale = false): void => {
+    noteSlot.innerHTML = `<div class="sp-note${stale ? ' stale' : ''}"><div class="sp-note-head">${
+      stale ? '이전 노트 · 다시 질문해서 "진행 중"으로 바뀌었어요' : '✓ 이해한 내용 노트'
+    }</div><div class="sp-note-body"></div></div>`
     const nb = noteSlot.querySelector<HTMLElement>('.sp-note-body')!
     nb.innerHTML = renderMarkdown(markdown)
     wireCitations(nb, paras, deps)
@@ -151,6 +163,13 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
     setBusy(true)
     const label = kind === 'question' ? question : FOLLOW_UP_LABELS[kind]
     const text = followUpPrompt(kind, question)
+    if (record.status === 'understood') {
+      // A new question means it isn't settled after all.
+      record.status = 'open'
+      syncGotIt()
+      if (record.note) showNote(record.note, true)
+      await save()
+    }
     addQuestion(label)
     const block = thinking('Thinking…')
     thread.appendChild(block)
@@ -166,6 +185,10 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
   /** "Got it": condense the conversation into a note in the same session. */
   const gotIt = async (): Promise<void> => {
     if (busy || !record?.sessionId) return
+    if (record.status === 'understood') {
+      scrollTo(noteSlot)
+      return
+    }
     setBusy(true)
     noteSlot.innerHTML = ''
     const block = thinking('노트로 정리하는 중…')
@@ -175,6 +198,7 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
     if (note !== null && record) {
       record.note = note
       record.status = 'understood'
+      syncGotIt()
       await save()
       showNote(note)
       scrollTo(noteSlot)
@@ -227,7 +251,8 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
         if (t.role === 'user' && i > 0) addQuestion(t.display)
         if (t.role === 'assistant') addAnswer(t.text)
       })
-      if (record.note) showNote(record.note)
+      if (record.note) showNote(record.note, record.status !== 'understood')
+      syncGotIt()
       composer.hidden = !record.sessionId
       setBusy(false)
       return
