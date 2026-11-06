@@ -90,7 +90,10 @@ const mockBridge: LlmBridge = {
     // Quote the selection itself as evidence so citation checking works.
     const quote = /Selected passage[^\n]*\n"([^"]{1,140})/.exec(req.text)?.[1] ?? ''
     const page = /\(p\.(\d+)\)/.exec(req.text)?.[1] ?? '1'
-    const answer = [
+    const followUp = /^Follow-up/.test(req.text)
+    const answer = followUp
+      ? `(개발용 가짜 응답) 이어서 물어본 내용: **${req.text.slice(0, 60)}**\n\n- 같은 세션에서 이어지는 답변이에요 [p.${/p\.(\d+)/.exec(req.text)?.[1] ?? '1'}].\n- 수식 예: $\\pi_\\theta(a|s)$`
+      : [
       '## 쉬운 설명',
       '(개발용 가짜 응답이에요. Electron 앱에서는 Claude가 실제로 답해요.) 이 부분은 **가치 함수**를 학습할 때',
       '목표값 $y = r + \\gamma \\bar Q(s\', a\')$ 과 현재 예측 $Q_\\psi(s,a)$ 의 차이를 줄인다는 뜻이에요 [p.' + page + '].',

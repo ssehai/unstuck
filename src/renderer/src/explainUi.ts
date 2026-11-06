@@ -1,17 +1,17 @@
 /**
- * The "stuck" flow inside the popup:
+ * The "stuck" flow inside the side panel:
  *   selection → (equation capture) → prompt with the whole paper → streamed
- *   explanation → evidence quotes checked against the paper → click to jump.
+ *   explanation → evidence quotes checked against the paper → click to jump
+ *   → follow-up questions in the same conversation (M3).
  */
 import { findCaptureRegion, looksMathy } from './capture'
 import { explain, LlmError, type Streaming } from './llm'
 import { jumpTo } from './locate'
 import { renderMarkdown } from './markdown'
-import { systemPrompt, userPrompt } from './prompt'
+import { followUpPrompt, systemPrompt, userPrompt, type FollowUpKind } from './prompt'
 import { checkQuote, formatPaper, normalizeForMatch, paperParagraphs, type Paragraph } from './paperText'
 import type { Reader } from './reader'
 import type { StuckSelection } from './selection'
-
 
 export interface ExplainDeps {
   reader: Reader
@@ -20,19 +20,138 @@ export interface ExplainDeps {
   relayout: () => void
 }
 
-/** Runs one explanation into `body`. Returns a cancel function. */
+/** One turn of the conversation about a passage (kept for "Got it" notes, M4). */
+export interface Turn {
+  role: 'user' | 'assistant'
+  text: string
+}
+
+const FOLLOW_UP_LABELS: Record<Exclude<FollowUpKind, 'question'>, string> = {
+  confusions: '헷갈리기 쉬운 점',
+  prerequisites: '선행 개념'
+}
+
+/** Runs the conversation for one selection inside `body`. Returns a cancel function. */
 export function startExplain(sel: StuckSelection, body: HTMLElement, deps: ExplainDeps): () => void {
   let stream: Streaming | null = null
   let cancelled = false
+  let busy = false
+  let sessionId: string | undefined
+  let system = ''
+  let paras: Paragraph[] = []
+  const turns: Turn[] = []
 
-  body.innerHTML = '<div class="sp-capture-slot"></div><div class="sp-answer"><p class="sp-thinking"><span class="dot"></span>Reading the paper…</p></div>'
+  body.innerHTML = '<div class="sp-capture-slot"></div><div class="sp-thread"></div>'
   const slot = body.querySelector<HTMLElement>('.sp-capture-slot')!
-  const answer = body.querySelector<HTMLElement>('.sp-answer')!
+  const thread = body.querySelector<HTMLElement>('.sp-thread')!
+
+  // Composer under the scrolling body: quick buttons + free-form question.
+  const composer = document.createElement('form')
+  composer.className = 'sp-composer'
+  composer.innerHTML = `
+    <div class="sp-quick">
+      <button type="button" class="chip" data-kind="confusions">${FOLLOW_UP_LABELS.confusions}</button>
+      <button type="button" class="chip" data-kind="prerequisites">${FOLLOW_UP_LABELS.prerequisites}</button>
+    </div>
+    <div class="sp-ask">
+      <textarea rows="1" placeholder="이어서 질문하기…" title="Enter: 보내기 · Shift+Enter: 줄바꿈"></textarea>
+      <button type="submit" class="btn primary sp-send" title="Send">↑</button>
+    </div>`
+  body.after(composer)
+  const input = composer.querySelector('textarea')!
+  const controls = (): HTMLButtonElement[] => Array.from(composer.querySelectorAll('button'))
+  const setBusy = (b: boolean): void => {
+    busy = b
+    controls().forEach((x) => (x.disabled = b))
+    input.disabled = b
+  }
+  setBusy(true)
+
+  const scrollToEnd = (el: HTMLElement): void => {
+    body.scrollTop = Math.max(0, el.offsetTop - body.offsetTop - 8)
+  }
+
+  /** Streams one assistant answer into a new block of the thread. */
+  const run = async (text: string, image?: string): Promise<void> => {
+    setBusy(true)
+    const block = document.createElement('div')
+    block.className = 'sp-answer'
+    block.innerHTML = '<p class="sp-thinking"><span class="dot"></span>Thinking…</p>'
+    thread.appendChild(block)
+    if (turns.length > 0) scrollToEnd(block)
+
+    let frame = 0
+    stream = explain({ system, text, image, sessionId }, (full) => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        block.innerHTML = renderMarkdown(full)
+      })
+    })
+    try {
+      const result = await stream.result
+      cancelAnimationFrame(frame)
+      sessionId = result.sessionId
+      block.innerHTML = renderMarkdown(result.text)
+      wireCitations(block, paras, deps)
+      turns.push({ role: 'user', text }, { role: 'assistant', text: result.text })
+    } catch (err) {
+      cancelAnimationFrame(frame)
+      if (cancelled) return
+      const e = err as LlmError
+      block.innerHTML = ''
+      const p = document.createElement('p')
+      p.className = 'sp-error'
+      p.textContent = e.auth
+        ? 'Claude CLI is not logged in. Open Terminal, run `claude`, and log in with /login. Then try again.'
+        : `Something went wrong: ${e.message}`
+      block.appendChild(p)
+    } finally {
+      if (!cancelled) setBusy(false)
+      if (!cancelled && turns.length === 0) {
+        // The first answer failed: nothing to follow up on.
+        composer.hidden = true
+      }
+    }
+  }
+
+  const ask = (kind: FollowUpKind, question = ''): void => {
+    if (busy || !sessionId) return
+    const bubble = document.createElement('div')
+    bubble.className = 'sp-question'
+    bubble.textContent = kind === 'question' ? question : FOLLOW_UP_LABELS[kind]
+    thread.appendChild(bubble)
+    run(followUpPrompt(kind, question))
+  }
+
+  composer.addEventListener('click', (e) => {
+    const chip = (e.target as HTMLElement).closest<HTMLButtonElement>('button.chip')
+    if (chip) ask(chip.dataset.kind as FollowUpKind)
+  })
+  composer.addEventListener('submit', (e) => {
+    e.preventDefault()
+    const q = input.value.trim()
+    if (!q) return
+    input.value = ''
+    autosize()
+    ask('question', q)
+  })
+  const autosize = (): void => {
+    input.style.height = 'auto'
+    input.style.height = `${Math.min(input.scrollHeight, 120)}px`
+  }
+  input.addEventListener('input', autosize)
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation() // don't trigger app shortcuts while typing
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      e.preventDefault()
+      composer.requestSubmit()
+    }
+  })
 
   ;(async () => {
     const doc = deps.reader.document
     if (!doc) return
-    const paras = await paperParagraphs(doc)
+    paras = await paperParagraphs(doc)
     if (cancelled) return
 
     // Equation image, when the selection contains math.
@@ -44,40 +163,11 @@ export function startExplain(sel: StuckSelection, body: HTMLElement, deps: Expla
       if (img) {
         image = img.dataUrl.replace(/^data:image\/png;base64,/, '')
         slot.innerHTML = `<figure class="sp-capture"><img alt="Captured equation" src="${img.dataUrl}"><figcaption>Sent with your question</figcaption></figure>`
-        slot.querySelector('img')!.onload = () => deps.relayout()
       }
     }
 
-    const home = paragraphOf(paras, sel)
-    const text = userPrompt(sel.text, sel.pageStart, home)
-
-    let frame = 0
-    stream = explain({ system: systemPrompt(deps.title(), formatPaper(paras, sel.pageStart)), text, image }, (full) => {
-      cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(() => {
-        answer.innerHTML = renderMarkdown(full)
-        deps.relayout()
-      })
-    })
-
-    try {
-      const result = await stream.result
-      cancelAnimationFrame(frame)
-      answer.innerHTML = renderMarkdown(result.text)
-      wireCitations(answer, paras, deps)
-      deps.relayout()
-    } catch (err) {
-      if (cancelled) return
-      const e = err as LlmError
-      answer.innerHTML = ''
-      const p = document.createElement('p')
-      p.className = 'sp-error'
-      p.textContent = e.auth
-        ? 'Claude CLI is not logged in. Open Terminal, run `claude`, and log in with /login. Then select the passage again.'
-        : `Something went wrong: ${e.message}`
-      answer.appendChild(p)
-      deps.relayout()
-    }
+    system = systemPrompt(deps.title(), formatPaper(paras, sel.pageStart))
+    await run(userPrompt(sel.text, sel.pageStart, paragraphOf(paras, sel)), image)
   })()
 
   return () => {

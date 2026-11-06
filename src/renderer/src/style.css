@@ -627,3 +627,93 @@ body.panel-closed #sidePanel {
   border-radius: 2px;
   mix-blend-mode: multiply;
 }
+
+/* ---------- Follow-up thread (M3) ---------- */
+.sp-question {
+  margin: 14px 0 8px auto;
+  max-width: 85%;
+  width: fit-content;
+  padding: 7px 11px;
+  border-radius: 12px 12px 4px 12px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+
+.sp-thread .sp-answer + .sp-question {
+  border-top: none;
+}
+
+.sp-composer {
+  flex: none;
+  margin: 0 -16px;
+  padding: 10px 16px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.sp-composer[hidden] {
+  display: none;
+}
+
+.sp-quick {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #faf9f6;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.chip:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chip:disabled,
+.sp-send:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.sp-ask {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.sp-ask textarea {
+  flex: 1;
+  resize: none;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+  max-height: 120px;
+}
+
+.sp-ask textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.sp-send {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 15px;
+  flex: none;
+}
