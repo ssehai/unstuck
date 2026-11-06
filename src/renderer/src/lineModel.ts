@@ -61,7 +61,10 @@ export function getLines(page: HTMLElement): Line[] {
   if (hit && hit.key === key && hit.canvas === canvas) return hit.lines
 
   const lines = buildLines(layer, canvas, cRect)
-  cache.set(layer, { key, canvas, lines })
+  // Right after a zoom the canvas may still be blank (re-rendering). Then no
+  // line lines up with ink; don't cache that, so the next call measures again.
+  const multiWord = lines.filter((l) => l.words.length > 1)
+  if (multiWord.length === 0 || multiWord.some((l) => l.inkAligned)) cache.set(layer, { key, canvas, lines })
   return lines
 }
 

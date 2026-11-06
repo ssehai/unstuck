@@ -139,6 +139,14 @@ export class Reader {
     return { dataUrl: canvas.toDataURL('image/png'), width, height }
   }
 
+  get scale(): number {
+    return this.viewer.currentScale
+  }
+
+  setScale(scale: number): void {
+    this.viewer.currentScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale))
+  }
+
   zoomIn(): void {
     this.viewer.increaseScale()
   }
