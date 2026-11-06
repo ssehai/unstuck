@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
-import { checkQuote, formatPaper, normalizeForMatch, paperParagraphs } from '../src/renderer/src/paperText.ts'
+import { checkQuote, formatPaper, isSent, needsAppendix, normalizeForMatch, paperParagraphs } from '../src/renderer/src/paperText.ts'
 import { systemPrompt, userPrompt } from '../src/renderer/src/prompt.ts'
 
 const [pdfPath, pageArg, selected] = process.argv.slice(2)
@@ -24,9 +24,10 @@ const doc = await getDocument({ data: new Uint8Array(readFileSync(pdfPath)), use
 const paras = await paperParagraphs(doc as never)
 const probe = normalizeForMatch(selected).slice(0, 60)
 const home = paras.find((p) => normalizeForMatch(p.text).includes(probe)) ?? null
-const system = systemPrompt(pdfPath.split('/').pop()!, formatPaper(paras, page))
-const text = userPrompt(selected, page, home)
-console.error(`paragraphs: ${paras.length}, prompt: ${system.length} chars, home: ${home ? `p.${home.page} ¶${home.index}` : 'not found'}\n`)
+const appendix = needsAppendix(paras, page, selected, home?.text ?? '')
+const system = systemPrompt(pdfPath.split('/').pop()!, formatPaper(paras, { appendix }))
+const text = userPrompt(selected, page, home, !!home && isSent(home, { appendix }))
+console.error(`paragraphs: ${paras.length}, prompt: ${system.length} chars, home: ${home ? `p.${home.page} ¶${home.index}` : 'not found'}, appendix: ${appendix}\n`)
 
 const started = Date.now()
 let firstToken = 0

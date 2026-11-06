@@ -13,7 +13,8 @@ import { explain, LlmError, type Streaming } from './llm'
 import { jumpTo } from './locate'
 import { renderMarkdown } from './markdown'
 import { baselineSystemPrompt, baselineUserPrompt, systemPrompt, userPrompt } from './prompt'
-import { checkQuote, formatPaper, normalizeForMatch, paperParagraphs, type Paragraph } from './paperText'
+import { paragraphAt } from './explainUi'
+import { checkQuote, formatPaper, isSent, needsAppendix, paperParagraphs, type Paragraph } from './paperText'
 import type { Reader } from './reader'
 import type { StuckSelection } from './selection'
 
@@ -169,8 +170,13 @@ export function startEvaluation(sel: StuckSelection, body: HTMLElement, deps: Ev
       }
     }
     if (cancelled) return
-    const home = paraOf(paras, sel)
-    run('tool', { system: systemPrompt(deps.title(), formatPaper(paras, sel.pageStart)), text: userPrompt(sel.text, sel.pageStart, home), image })
+    const home = paragraphAt(paras, sel.pageStart, sel.text)
+    const appendix = needsAppendix(paras, sel.pageStart, sel.text, home?.text ?? '')
+    run('tool', {
+      system: systemPrompt(deps.title(), formatPaper(paras, { appendix })),
+      text: userPrompt(sel.text, sel.pageStart, home, !!home && isSent(home, { appendix })),
+      image
+    })
     run('baseline', { system: baselineSystemPrompt(), text: baselineUserPrompt(sel.text) })
   })()
 
@@ -287,12 +293,6 @@ export function startEvaluation(sel: StuckSelection, body: HTMLElement, deps: Ev
     cancelled = true
     streams.forEach((s) => s.cancel())
   }
-}
-
-function paraOf(paras: Paragraph[], sel: StuckSelection): Paragraph | null {
-  const probe = normalizeForMatch(sel.text).slice(0, 60)
-  if (probe.length < 6) return null
-  return paras.find((p) => normalizeForMatch(p.text).includes(probe)) ?? null
 }
 
 /** Running totals across all saved evaluations. */

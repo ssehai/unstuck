@@ -11,8 +11,8 @@ import { explain, LlmError, type Streaming } from './llm'
 import { jumpTo } from './locate'
 import { renderMarkdown } from './markdown'
 import type { NotesStore, StoredTurn, StuckRecord } from './notes'
-import { followUpPrompt, NOTE_PROMPT, systemPrompt, userPrompt, type FollowUpKind } from './prompt'
-import { checkQuote, formatPaper, normalizeForMatch, paperParagraphs, type Paragraph } from './paperText'
+import { followUpPrompt, NOTE_MODEL, NOTE_SYSTEM, notePrompt, systemPrompt, userPrompt, type FollowUpKind } from './prompt'
+import { checkQuote, formatPaper, isSent, needsAppendix, normalizeForMatch, paperParagraphs, type Paragraph } from './paperText'
 import type { Reader } from './reader'
 import type { StuckSelection } from './selection'
 
@@ -182,7 +182,7 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
     if (!cancelled) setBusy(false)
   }
 
-  /** "Got it": condense the conversation into a note in the same session. */
+  /** "Got it": condense the conversation into a short note. */
   const gotIt = async (): Promise<void> => {
     if (busy || !record?.sessionId) return
     if (record.status === 'understood') {
@@ -194,7 +194,28 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
     const block = thinking('노트로 정리하는 중…')
     noteSlot.appendChild(block)
     scrollTo(block)
-    const note = await stream1(block, NOTE_PROMPT)
+    // A cheap model, from the conversation alone: no paper, no session.
+    let note: string | null = null
+    let frame = 0
+    stream = explain(
+      { system: NOTE_SYSTEM, text: notePrompt(record.quote, record.turns), model: NOTE_MODEL, ephemeral: true },
+      (full) => {
+        cancelAnimationFrame(frame)
+        frame = requestAnimationFrame(() => (block.innerHTML = renderMarkdown(full)))
+      }
+    )
+    try {
+      note = (await stream.result).text
+    } catch (err) {
+      if (!cancelled) {
+        block.innerHTML = ''
+        const p = document.createElement('p')
+        p.className = 'sp-error'
+        p.textContent = errorText(err as LlmError)
+        block.appendChild(p)
+      }
+    }
+    cancelAnimationFrame(frame)
     if (note !== null && record) {
       record.note = note
       record.status = 'understood'
@@ -242,7 +263,13 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
     if (!doc) return
     paras = await paperParagraphs(doc)
     if (cancelled) return
-    system = systemPrompt(deps.title(), formatPaper(paras, page))
+    // What to send: the paper without references, and the appendix only if
+    // this passage needs it. Deterministic per passage, so a reopened stuck
+    // point resumes with exactly the same prompt (and cache).
+    const quote = 'record' in src ? src.record.quote : src.sel.text
+    const home = paragraphAt(paras, page, quote)
+    const appendix = needsAppendix(paras, page, quote, home?.text ?? '')
+    system = systemPrompt(deps.title(), formatPaper(paras, { appendix }))
 
     // Reopening a saved stuck point: replay it, then allow continuing.
     if (record) {
@@ -273,7 +300,7 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
       }
     }
 
-    const text = userPrompt(sel.text, sel.pageStart, paragraphOf(paras, sel))
+    const text = userPrompt(sel.text, sel.pageStart, home, !!home && isSent(home, { appendix }))
     const block = thinking('Reading the paper…')
     thread.appendChild(block)
     const reply = await stream1(block, text, image)
@@ -311,12 +338,12 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
   }
 }
 
-/** The paragraph that contains the selection (for extra context in the prompt). */
-function paragraphOf(paras: Paragraph[], sel: StuckSelection): Paragraph | null {
-  const probe = normalizeForMatch(sel.text).slice(0, 60)
+/** The paragraph that contains a passage (for extra context in the prompt). */
+export function paragraphAt(paras: Paragraph[], page: number, text: string): Paragraph | null {
+  const probe = normalizeForMatch(text).slice(0, 60)
   if (probe.length < 6) return null
   return (
-    paras.find((p) => p.page === sel.pageStart && normalizeForMatch(p.text).includes(probe)) ??
+    paras.find((p) => p.page === page && normalizeForMatch(p.text).includes(probe)) ??
     paras.find((p) => normalizeForMatch(p.text).includes(probe)) ??
     null
   )

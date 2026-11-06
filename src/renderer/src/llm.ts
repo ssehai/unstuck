@@ -9,6 +9,10 @@ export interface ExplainRequest {
   text: string
   image?: string // base64 PNG
   sessionId?: string
+  /** Model override, e.g. 'haiku' for cheap summaries. */
+  model?: string
+  /** One-off request: don't keep a session for it. */
+  ephemeral?: boolean
 }
 
 export interface ExplainResult {
@@ -91,7 +95,7 @@ const mockBridge: LlmBridge = {
     const quote = /Selected passage[^\n]*\n"([^"]{1,140})/.exec(req.text)?.[1] ?? ''
     const page = /\(p\.(\d+)\)/.exec(req.text)?.[1] ?? '1'
     const followUp = /^Follow-up/.test(req.text)
-    const note = /pressed "Got it"/.test(req.text)
+    const note = /Write the note\.$/.test(req.text)
     const answer = note
       ? '### 가짜 노트: 행동 정규화\n**막혔던 점:** 왜 정책을 behavior policy에 가깝게 두는지\n**핵심:**\n- 데이터 밖 행동의 Q값은 부풀려지기 쉬워요\n- 그래서 $D(\\pi, \\pi_b)$ 벌점을 줘요\n**근거:** [p.4 ¶6]'
       : followUp

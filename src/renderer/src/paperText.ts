@@ -8,10 +8,13 @@
  */
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 
+export type Section = 'body' | 'references' | 'appendix'
+
 export interface Paragraph {
   page: number
   index: number // 1-based within the page
   text: string
+  section: Section
 }
 
 interface Item {
@@ -47,7 +50,42 @@ async function extract(doc: PDFDocumentProxy): Promise<Paragraph[]> {
     }
     out.push(...toParagraphs(n, items))
   }
+  labelSections(out)
   return out
+}
+
+const REFERENCES_HEADING = /^(references|bibliography|literature cited)\b/i
+// "A Additional Experiment Results", "Appendix", "A.1 Proofs", "Supplementary Material"
+const APPENDIX_HEADING = /^(appendix|appendices|supplementary|[A-H](\.\d+)*\s+[A-Z][A-Za-z-]+)/
+
+/**
+ * Marks paragraphs as body, references, or appendix. References start at the
+ * last "References" heading; an appendix starts at the first appendix-style
+ * heading after it (or at an "Appendix" heading before it).
+ */
+function labelSections(paras: Paragraph[]): void {
+  // The last "References" heading after the first fifth of the paper (a long
+  // appendix can push the references well before the middle).
+  const half = Math.floor(paras.length / 2)
+  const minRef = Math.floor(paras.length / 5)
+  let refStart = -1
+  paras.forEach((p, i) => {
+    if (i >= minRef && REFERENCES_HEADING.test(p.text.trim()) && p.text.length < 40) refStart = i
+  })
+  if (refStart < 0) refStart = paras.length
+  let appStart = paras.findIndex((p, i) => i > refStart && APPENDIX_HEADING.test(p.text.trim()) && p.text.length < 120)
+  if (appStart < 0) {
+    // Some papers put the appendix before the references.
+    const a = paras.findIndex((p, i) => i >= half && /^(appendix|appendices)\b/i.test(p.text.trim()) && p.text.length < 60)
+    appStart = a >= 0 && a < refStart ? a : -1
+  }
+  paras.forEach((p, i) => {
+    if (appStart >= 0 && appStart < refStart) {
+      p.section = i >= refStart ? 'references' : i >= appStart ? 'appendix' : 'body'
+    } else {
+      p.section = appStart >= 0 && i >= appStart ? 'appendix' : i >= refStart ? 'references' : 'body'
+    }
+  })
 }
 
 function toParagraphs(page: number, items: Item[]): Paragraph[] {
@@ -88,31 +126,63 @@ function toParagraphs(page: number, items: Item[]): Paragraph[] {
     text = text ? (text.endsWith('-') ? text + s : `${text} ${s}`) : s
   })
   paras.push(text)
-  return paras.filter((t) => t.trim()).map((t, i) => ({ page, index: i + 1, text: t }))
+  return paras.filter((t) => t.trim()).map((t, i) => ({ page, index: i + 1, text: t, section: 'body' as Section }))
 }
 
-/** The paper formatted for the prompt, limited to `maxChars` (pages near `focusPage` first). */
-export function formatPaper(paras: Paragraph[], focusPage: number, maxChars = 150_000): string {
-  const byPage = new Map<number, Paragraph[]>()
-  for (const p of paras) byPage.set(p.page, [...(byPage.get(p.page) ?? []), p])
-  const pages = [...byPage.keys()]
-  const pageText = (n: number): string => byPage.get(n)!.map((p) => `[p.${p.page} ¶${p.index}] ${p.text}`).join('\n')
+/**
+ * Should the appendix be sent? Only when the passage is in it, or the passage
+ * (or its paragraph) points to it. Saves a lot: appendices can be half a paper.
+ */
+export function needsAppendix(paras: Paragraph[], page: number, ...texts: string[]): boolean {
+  const appendixPages = new Set(paras.filter((p) => p.section === 'appendix').map((p) => p.page))
+  if (appendixPages.size === 0) return false
+  if (appendixPages.has(page) && !paras.some((p) => p.page === page && p.section === 'body')) return true
+  if (paras.some((p) => p.page === page && p.section === 'appendix' && texts.some((t) => normalizeForMatch(p.text).includes(normalizeForMatch(t).slice(0, 40))))) return true
+  return texts.some((t) => /\b(appendix|appendices|supplementary)\b/i.test(t))
+}
 
-  const total = pages.reduce((s, n) => s + pageText(n).length, 0)
-  let keep = new Set(pages)
-  if (total > maxChars) {
-    keep = new Set()
-    let used = 0
-    for (const n of [...pages].sort((a, b) => Math.abs(a - focusPage) - Math.abs(b - focusPage))) {
-      const len = pageText(n).length
-      if (used + len > maxChars) continue
-      keep.add(n)
-      used += len
+/**
+ * The paper formatted for the prompt. References are always left out (they
+ * rarely help explain a passage); the appendix only when asked for. The output
+ * depends only on the paper and that flag, never on which passage was
+ * selected, so the prompt prefix stays identical and the model's prompt cache
+ * keeps hitting across selections.
+ */
+export function formatPaper(paras: Paragraph[], opts: { appendix: boolean }, maxChars = 120_000): string {
+  const lines: string[] = []
+  let used = 0
+  let truncatedAt: number | null = null
+  let refsOmitted = false
+  const appendixPages = new Set<number>()
+  for (const p of paras) {
+    if (p.section === 'references') {
+      refsOmitted = true
+      continue
     }
+    if (p.section === 'appendix' && !opts.appendix) {
+      appendixPages.add(p.page)
+      continue
+    }
+    const line = `[p.${p.page} ¶${p.index}] ${p.text}`
+    if (used + line.length > maxChars) {
+      truncatedAt ??= p.page
+      continue
+    }
+    lines.push(line)
+    used += line.length + 1
   }
-  return pages
-    .map((n) => (keep.has(n) ? pageText(n) : `[p.${n}] (omitted for length)`))
-    .join('\n\n')
+  if (refsOmitted) lines.push('[References omitted.]')
+  if (appendixPages.size) {
+    const pages = [...appendixPages]
+    lines.push(`[Appendix (pp.${Math.min(...pages)}–${Math.max(...pages)}) omitted. If the answer needs it, say so.]`)
+  }
+  if (truncatedAt !== null) lines.push(`[Text from p.${truncatedAt} on omitted for length.]`)
+  return lines.join('\n')
+}
+
+/** Is this paragraph part of what formatPaper sends? */
+export function isSent(p: Paragraph, opts: { appendix: boolean }): boolean {
+  return p.section === 'body' || (p.section === 'appendix' && opts.appendix)
 }
 
 /** Lowercased, without spaces/hyphens/quotes: robust to PDF extraction quirks. */

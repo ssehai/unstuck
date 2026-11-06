@@ -11,16 +11,16 @@ Answer in Korean. Keep technical terms in English, in parentheses, the first tim
 For the FIRST explanation of a passage, use exactly this structure:
 
 ## 쉬운 설명
-At most 5 short sentences: what the passage means in plain words, and why it matters at this point of the paper. Explain only what is needed to unblock the student; they can ask follow-up questions. When you rely on another part of the paper, cite it inline like [p.4 ¶2].
+At most 4 short sentences: what the passage means in plain words, and why it matters at this point of the paper. Explain only what is needed to unblock the student; they can ask follow-up questions. When you rely on another part of the paper, cite it inline like [p.4 ¶2].
 
 ## 예시
-One small concrete example (numbers, or an everyday analogy) that makes it click. Keep it short.
+One small concrete example (numbers, or an everyday analogy) that makes it click, in 2–3 sentences.
 
 ## 근거
-1–3 bullets, each exactly:  - [p.N ¶M] "quote"
-where the quote is copied verbatim from the PAPER TEXT below (8–30 words, no paraphrasing, no ellipses), so it can be verified automatically.
+1–2 bullets, each exactly:  - [p.N ¶M] "quote"
+where the quote is copied verbatim from the PAPER TEXT below (8–20 words, no paraphrasing, no ellipses), so it can be verified automatically.
 
-For FOLLOW-UP questions about the same passage, answer the question directly instead (no fixed sections), in at most 6 short sentences or a short list. If you rely on the paper, cite it inline like [p.4 ¶2]; you may end with a "## 근거" section in the same bullet format when quotes help.
+For FOLLOW-UP questions about the same passage, answer the question directly instead (no fixed sections), in at most 5 short sentences or a short list. If you rely on the paper, cite it inline like [p.4 ¶2]; you may end with a "## 근거" section in the same bullet format when quotes help.
 
 Rules:
 - Ground the explanation in this paper. If something is general background not stated in the paper, say so.
@@ -30,13 +30,18 @@ Rules:
 PAPER TEXT — "${title}" (paragraphs labelled [p.page ¶paragraph]):
 ${paper}`
 
-export function userPrompt(selected: string, page: number, home: Paragraph | null): string {
-  return [
-    `Selected passage (p.${page}):`,
-    `"${selected}"`,
-    home ? `\nIt appears in [p.${home.page} ¶${home.index}]: "${home.text}"` : '',
-    '\nExplain this passage.'
-  ].join('\n')
+/**
+ * The first question about a passage. The paragraph it sits in is referred to
+ * by its label when the paper text already contains it (no need to repeat it),
+ * and quoted only when it was left out (e.g. a passage in the references).
+ */
+export function userPrompt(selected: string, page: number, home: Paragraph | null, homeIsInPaper = false): string {
+  const where = home
+    ? homeIsInPaper
+      ? `\nIt appears in [p.${home.page} ¶${home.index}] of the PAPER TEXT.`
+      : `\nIt appears in this paragraph (not included in the PAPER TEXT): "${home.text}"`
+    : ''
+  return [`Selected passage (p.${page}):`, `"${selected}"`, where, '\nExplain this passage.'].join('\n')
 }
 
 export type FollowUpKind = 'question' | 'confusions' | 'prerequisites'
@@ -53,17 +58,29 @@ export function followUpPrompt(kind: FollowUpKind, question = ''): string {
   }
 }
 
-/** Asked in the same conversation when the reader presses "Got it". */
-export const NOTE_PROMPT = `The student pressed "Got it": they now understand this passage. Write a short study note in Korean that they can review later, based on this conversation (what they were stuck on, and what made it click). Use exactly this format, with no preamble:
+/**
+ * "Got it" notes are written by a small, cheap model from the conversation
+ * alone (no paper): summarising needs only what was said.
+ */
+export const NOTE_MODEL = 'haiku'
+
+export const NOTE_SYSTEM = `You write short study notes in Korean for a student who just understood a passage of a research paper. Use exactly this format, with no preamble:
 
 ### <title: the concept in at most 8 words>
 **막혔던 점:** <one sentence: what was confusing>
 **핵심:**
 - <2–3 bullets: the explanation that resolved it, concise>
 **예시:** <one line, optional; omit the line if no example helps>
-**근거:** <1–2 citations like [p.4 ¶2]>
+**근거:** <1–2 citations like [p.4 ¶2], copied from the conversation; omit if there are none>
 
-Write math in LaTeX ($...$).`
+Use only what is in the conversation. Write math in LaTeX ($...$).`
+
+export function notePrompt(passage: string, turns: { role: 'user' | 'assistant'; display: string; text: string }[]): string {
+  const convo = turns
+    .map((t, i) => (t.role === 'user' ? `Student: ${i === 0 ? 'Explain this passage.' : t.display}` : `Tutor: ${t.text}`))
+    .join('\n\n')
+  return `Passage the student was stuck on:\n"${passage}"\n\nConversation:\n${convo}\n\nWrite the note.`
+}
 
 // --- Evaluation baseline (M5) ------------------------------------------------------
 // Reproduces "copy the passage into a general chatbot": same model, same
@@ -76,10 +93,10 @@ Answer in Korean. Keep technical terms in English, in parentheses, the first tim
 Use exactly this structure:
 
 ## 쉬운 설명
-At most 5 short sentences: what the passage means in plain words.
+At most 4 short sentences: what the passage means in plain words.
 
 ## 예시
-One small concrete example (numbers, or an everyday analogy) that makes it click. Keep it short.
+One small concrete example (numbers, or an everyday analogy) that makes it click, in 2–3 sentences.
 
 Write math in LaTeX: $...$ inline, $$...$$ for display.`
 

@@ -25,6 +25,10 @@ export interface ExplainRequest {
   image?: string
   /** Continue an earlier conversation. */
   sessionId?: string
+  /** Model override (CLI alias like 'haiku', or a full model id). */
+  model?: string
+  /** One-off request: no session is kept. */
+  ephemeral?: boolean
 }
 
 export type LlmEvent =
@@ -80,13 +84,14 @@ class ClaudeCliBackend implements Backend {
       '--output-format', 'stream-json',
       '--verbose',
       '--include-partial-messages',
-      '--model', this.model,
+      '--model', req.model || this.model,
       '--tools', '', // pure reasoning: no file or shell access
       '--setting-sources', '', // ignore the user's hooks/plugins/output styles
       '--strict-mcp-config', // and their MCP servers
       '--system-prompt', req.system
     ]
     if (req.sessionId) args.push('--resume', req.sessionId)
+    if (req.ephemeral) args.push('--no-session-persistence')
 
     let child: ChildProcess
     try {
@@ -169,6 +174,13 @@ class ClaudeCliBackend implements Backend {
 
 // --- Anthropic API -----------------------------------------------------------------
 
+/** CLI-style aliases → API model ids. */
+const API_MODELS: Record<string, string> = {
+  haiku: 'claude-haiku-5-5',
+  sonnet: 'claude-sonnet-5-5',
+  opus: 'claude-opus-5-5'
+}
+
 class AnthropicApiBackend implements Backend {
   private readonly model = process.env['UNSTUCK_MODEL'] || 'claude-sonnet-5-5'
   private readonly history = new Map<string, { role: 'user' | 'assistant'; content: ContentBlock[] | string }[]>()
@@ -191,7 +203,7 @@ class AnthropicApiBackend implements Backend {
           signal: controller.signal,
           headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
           body: JSON.stringify({
-            model: this.model,
+            model: req.model ? API_MODELS[req.model] ?? req.model : this.model,
             max_tokens: 2048,
             stream: true,
             // The paper is in the system prompt and reused across questions.
@@ -227,7 +239,7 @@ class AnthropicApiBackend implements Backend {
             }
           }
         }
-        this.history.set(sessionId, [...messages, { role: 'assistant', content: full }])
+        if (!req.ephemeral) this.history.set(sessionId, [...messages, { role: 'assistant', content: full }])
         emit({ id: req.id, kind: 'done', sessionId, text: full })
       } catch (err) {
         if (!controller.signal.aborted) emit({ id: req.id, kind: 'error', message: (err as Error).message })
