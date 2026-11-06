@@ -24,6 +24,8 @@ export function installMenu(): void {
         { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: () => send('zoom-out') },
         { label: 'Fit to Width', accelerator: 'CmdOrCtrl+0', click: () => send('zoom-fit') },
         { type: 'separator' },
+        { label: 'Evaluation Mode (blind A/B)', accelerator: 'CmdOrCtrl+Shift+E', click: () => send('toggle-eval') },
+        { type: 'separator' },
         { role: 'reload' },
         { role: 'toggleDevTools' },
         { type: 'separator' },

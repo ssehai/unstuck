@@ -956,3 +956,157 @@ body.panel-closed #sidePanel {
 .unstuck-overlay .stuck-marker {
   box-sizing: border-box; /* the border stays inside the line-sized dot */
 }
+
+/* ---------- Evaluation mode (M5) ---------- */
+.eval-badge {
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #8a4a12;
+  background: #fdf1e7;
+  border: 1px solid #f0c9a3;
+  border-radius: 999px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+
+.eval-badge[hidden] {
+  display: none;
+}
+
+.ev-banner {
+  font-size: 12px;
+  font-weight: 700;
+  color: #8a4a12;
+  margin-bottom: 8px;
+}
+
+.ev-banner .muted {
+  font-weight: 400;
+  margin-left: 4px;
+}
+
+.ev-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+
+.ev-tab {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.ev-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.ev-tab-state {
+  font-weight: 400;
+  margin-left: 4px;
+}
+
+.ev-pane[hidden] {
+  display: none;
+}
+
+.ev-form {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #faf9f6;
+}
+
+.ev-form[hidden] {
+  display: none;
+}
+
+.ev-q {
+  font-size: 12.5px;
+  font-weight: 600;
+  margin: 10px 0 6px;
+}
+
+.ev-q:first-child {
+  margin-top: 0;
+}
+
+.ev-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ev-choices button {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.ev-choices button.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.ev-comment {
+  width: 100%;
+  margin-top: 10px;
+  font: inherit;
+  font-size: 12.5px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  resize: vertical;
+}
+
+.ev-submit {
+  margin-top: 10px;
+}
+
+.ev-reveal,
+.ev-saved {
+  font-size: 12.5px;
+}
+
+.ev-saved {
+  color: #2e7a4b;
+  font-weight: 600;
+}
+
+.ev-stats {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f4f3ef;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.ev-stats-title {
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.ev-stats .chip {
+  margin-top: 6px;
+}
+
+/* In evaluation mode there is nothing to follow up on in the panel. */
+body.eval-mode .sp-composer {
+  display: none;
+}

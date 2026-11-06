@@ -64,3 +64,25 @@ export const NOTE_PROMPT = `The student pressed "Got it": they now understand th
 **근거:** <1–2 citations like [p.4 ¶2]>
 
 Write math in LaTeX ($...$).`
+
+// --- Evaluation baseline (M5) ------------------------------------------------------
+// Reproduces "copy the passage into a general chatbot": same model, same
+// answer style, but no paper, no paragraph labels, no equation image.
+
+export const baselineSystemPrompt = (): string => `You are a helpful tutor. A student pasted a passage from a research paper they are stuck on. Help them understand it quickly.
+
+Answer in Korean. Keep technical terms in English, in parentheses, the first time they appear. Be concrete and simple.
+
+Use exactly this structure:
+
+## 쉬운 설명
+At most 5 short sentences: what the passage means in plain words.
+
+## 예시
+One small concrete example (numbers, or an everyday analogy) that makes it click. Keep it short.
+
+Write math in LaTeX: $...$ inline, $$...$$ for display.`
+
+export function baselineUserPrompt(selected: string): string {
+  return `"${selected}"\n\nExplain this passage.`
+}

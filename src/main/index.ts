@@ -4,6 +4,7 @@ import { registerLibrary } from './library'
 import { registerLlm } from './llm'
 import { installMenu } from './menu'
 import { registerNotes } from './notes'
+import { registerEvaluation } from './evaluation'
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -37,6 +38,7 @@ app.whenReady().then(() => {
   registerLibrary()
   registerLlm()
   registerNotes()
+  registerEvaluation()
   installMenu()
   createWindow()
   app.on('activate', () => {

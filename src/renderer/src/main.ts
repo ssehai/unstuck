@@ -1,5 +1,6 @@
 import './style.css'
 import { startConversation } from './explainUi'
+import { getEvalStore, startEvaluation } from './evaluation'
 import { jumpTo } from './locate'
 import { getNotesStore, type StuckRecord } from './notes'
 import { StuckPoints } from './stuckPoints'
@@ -59,8 +60,22 @@ const conversationDeps = () => ({
 })
 popup.onSelect = (sel, body) => {
   cancelExplain?.()
-  cancelExplain = startConversation({ sel }, body, conversationDeps())
+  cancelExplain = evalMode
+    ? startEvaluation(sel, body, { reader, container, title: () => fileName.textContent ?? 'paper', store: evalStore })
+    : startConversation({ sel }, body, conversationDeps())
 }
+
+// --- Evaluation mode (M5): blind A/B against a passage-only baseline ------------
+const evalStore = getEvalStore()
+const evalBadge = $<HTMLButtonElement>('evalBadge')
+let evalMode = false
+function setEvalMode(on: boolean): void {
+  evalMode = on
+  evalBadge.hidden = !on
+  document.body.classList.toggle('eval-mode', on)
+  popup.hide()
+}
+evalBadge.addEventListener('click', () => setEvalMode(false))
 popup.onHide = () => {
   cancelExplain?.()
   cancelExplain = null
@@ -240,6 +255,9 @@ document.addEventListener('keydown', (e) => {
   } else if ((e.metaKey || e.ctrlKey) && key === 'l') {
     e.preventDefault()
     libraryBtn.click()
+  } else if ((e.metaKey || e.ctrlKey) && e.shiftKey && key === 'e' && !window.unstuckApi) {
+    e.preventDefault() // in Electron the menu handles ⌘⇧E
+    setEvalMode(!evalMode)
   } else if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
     e.preventDefault()
     panelBtn.click()
@@ -305,7 +323,8 @@ function zoomCommand(cmd: 'in' | 'out' | 'fit'): void {
   else reader.fitWidth()
 }
 window.unstuckApi?.onMenu?.((cmd) => {
-  if (cmd === 'zoom-in') zoomCommand('in')
+  if (cmd === 'toggle-eval') setEvalMode(!evalMode)
+  else if (cmd === 'zoom-in') zoomCommand('in')
   else if (cmd === 'zoom-out') zoomCommand('out')
   else if (cmd === 'zoom-fit') zoomCommand('fit')
 })

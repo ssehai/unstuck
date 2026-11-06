@@ -26,7 +26,7 @@ interface Spot {
 }
 
 /** Dot diameter relative to the passage's line height (stays within the line). */
-const DOT_OF_LINE = 0.85
+const DOT_OF_LINE = 0.7
 /** Gap between the dot and the text, relative to the dot size. */
 const GAP_OF_DOT = 0.6
 

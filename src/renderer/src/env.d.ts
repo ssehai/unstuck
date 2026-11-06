@@ -6,6 +6,7 @@ interface Window {
     library: import('./library').Library
     llm: import('./llm').LlmBridge
     notes: import('./notes').NotesStore
+    evaluation: import('./evaluation').EvalStore
     onMenu?: (cb: (command: string) => void) => () => void
   }
 }
