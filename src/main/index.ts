@@ -3,6 +3,7 @@ import { join } from 'path'
 import { registerLibrary } from './library'
 import { registerLlm } from './llm'
 import { installMenu } from './menu'
+import { registerNotes } from './notes'
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -35,6 +36,7 @@ function createWindow(): void {
 app.whenReady().then(() => {
   registerLibrary()
   registerLlm()
+  registerNotes()
   installMenu()
   createWindow()
   app.on('activate', () => {

@@ -21,6 +21,7 @@ export interface ReaderEvents {
   onPageChange?: (page: number, total: number) => void
   onScaleChange?: (scale: number) => void
   onDocumentLoaded?: (doc: PDFDocumentProxy) => void
+  onTextLayer?: (page: number) => void
 }
 
 /** Thin wrapper around pdf.js's PDFViewer: scrolling, text layer, zoom. */
@@ -54,6 +55,9 @@ export class Reader {
     })
     this.eventBus.on('pagechanging', (e: { pageNumber: number }) => {
       events.onPageChange?.(e.pageNumber, this.doc?.numPages ?? 0)
+    })
+    this.eventBus.on('textlayerrendered', (e: { pageNumber: number }) => {
+      events.onTextLayer?.(e.pageNumber)
     })
     this.eventBus.on('scalechanging', (e: { scale: number }) => {
       events.onScaleChange?.(e.scale)

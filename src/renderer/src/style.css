@@ -717,3 +717,212 @@ body.panel-closed #sidePanel {
   font-size: 15px;
   flex: none;
 }
+
+/* ---------- Stuck points & notes (M4) ---------- */
+.panel-home {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-home[hidden] {
+  display: none;
+}
+
+.ph-hint {
+  margin: auto;
+  padding: 24px 28px;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.ph-hint p {
+  margin: 0 0 8px;
+}
+
+.ph-hint.compact {
+  margin: 0;
+  padding: 14px 16px 6px;
+  text-align: left;
+}
+
+.ph-hint.compact .pe-icon,
+.ph-hint.compact p:not(:first-of-type) {
+  display: none;
+}
+
+.ph-stuck {
+  padding: 4px 10px 16px;
+}
+
+.ph-stuck[hidden] {
+  display: none;
+}
+
+.ph-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--muted);
+  padding: 8px 6px 6px;
+}
+
+.stuck-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.stuck-item {
+  display: flex;
+  align-items: flex-start;
+  border-radius: 8px;
+}
+
+.stuck-item:hover {
+  background: #f4f3ef;
+}
+
+.si-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 8px;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.si-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.si-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e0912f;
+}
+
+.stuck-item.understood .si-dot {
+  background: #2e9e5b;
+}
+
+.si-page {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.si-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.si-quote {
+  font-size: 12px;
+  color: #5a5a54;
+  font-style: italic;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.si-remove {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 15px;
+  width: 26px;
+  height: 26px;
+  margin: 6px 4px 0 0;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.stuck-item:hover .si-remove {
+  opacity: 1;
+}
+
+.si-remove:hover {
+  background: #e4e3de;
+}
+
+.marker-layer {
+  position: absolute;
+  inset: 0 auto auto 0;
+  z-index: 7;
+}
+
+.stuck-marker {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: #e0912f;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+}
+
+.stuck-marker.understood {
+  background: #2e9e5b;
+}
+
+.stuck-marker:hover {
+  transform: scale(1.35);
+}
+
+.sp-quick .spacer {
+  flex: 1;
+}
+
+.chip.got-it {
+  border-color: #2e9e5b;
+  color: #2e7a4b;
+  background: #f0f8f3;
+}
+
+.chip.got-it:hover:not(:disabled) {
+  background: #2e9e5b;
+  color: #fff;
+  border-color: #2e9e5b;
+}
+
+.sp-note {
+  margin: 14px 0 4px;
+  border: 1px solid #bfe2cc;
+  background: #f4fbf6;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.sp-note-head {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #2e7a4b;
+  margin-bottom: 4px;
+}
+
+.sp-note-body h4 {
+  color: var(--text);
+  font-size: 13.5px;
+  margin: 2px 0 6px;
+}
+
+.sp-note-body p {
+  margin: 0 0 4px;
+}

@@ -108,6 +108,7 @@ export function registerLibrary(): void {
       const i = list.findIndex((m) => m.id === id)
       if (i >= 0) list.splice(i, 1)
       await fs.rm(pdfPath(id), { force: true })
+      await fs.rm(join(dir(), 'notes', `${id}.json`), { force: true }) // its stuck points too
       return true
     })
   })

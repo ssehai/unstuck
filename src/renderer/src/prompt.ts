@@ -52,3 +52,15 @@ export function followUpPrompt(kind: FollowUpKind, question = ''): string {
       return `Follow-up question: ${question}`
   }
 }
+
+/** Asked in the same conversation when the reader presses "Got it". */
+export const NOTE_PROMPT = `The student pressed "Got it": they now understand this passage. Write a short study note in Korean that they can review later, based on this conversation (what they were stuck on, and what made it click). Use exactly this format, with no preamble:
+
+### <title: the concept in at most 8 words>
+**막혔던 점:** <one sentence: what was confusing>
+**핵심:**
+- <2–3 bullets: the explanation that resolved it, concise>
+**예시:** <one line, optional; omit the line if no example helps>
+**근거:** <1–2 citations like [p.4 ¶2]>
+
+Write math in LaTeX ($...$).`

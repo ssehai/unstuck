@@ -15,6 +15,11 @@ contextBridge.exposeInMainWorld('unstuckApi', {
     update: (id: string, patch: object) => ipcRenderer.invoke('library:update', id, patch),
     remove: (id: string) => ipcRenderer.invoke('library:remove', id)
   },
+  notes: {
+    list: (paperId: string) => ipcRenderer.invoke('notes:list', paperId),
+    put: (paperId: string, record: object) => ipcRenderer.invoke('notes:put', paperId, record),
+    remove: (paperId: string, id: string) => ipcRenderer.invoke('notes:remove', paperId, id)
+  },
   llm: {
     explain: (req: object) => ipcRenderer.invoke('llm:explain', req),
     cancel: (id: string) => ipcRenderer.invoke('llm:cancel', id),

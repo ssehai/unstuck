@@ -26,6 +26,7 @@ export class SelectionPopup {
   private current: StuckSelection | null = null
   onSelect?: (sel: StuckSelection, body: HTMLElement) => void
   onHide?: () => void
+  private locate: () => void = () => undefined
 
   constructor(container: HTMLElement, panel: HTMLElement) {
     this.container = container
@@ -34,7 +35,7 @@ export class SelectionPopup {
     this.highlights.className = 'stuck-highlights'
     container.appendChild(this.highlights)
 
-    this.emptyHint = panel.querySelector('.panel-empty')
+    this.emptyHint = panel.querySelector('.panel-home')
     this.card = document.createElement('div')
     this.card.className = 'stuck-card'
     this.card.hidden = true
@@ -55,6 +56,10 @@ export class SelectionPopup {
 
   get selection(): StuckSelection | null {
     return this.current
+  }
+
+  get cardOpen(): boolean {
+    return !this.card.hidden
   }
 
   hide(): void {
@@ -97,15 +102,26 @@ export class SelectionPopup {
     }
 
     if (!this.card.hidden) this.onHide?.() // stop the previous explanation
-    this.current = { text, pageStart: startPage, pageEnd: endPage, range }
+    const sel: StuckSelection = { text, pageStart: startPage, pageEnd: endPage, range }
+    this.current = sel
     this.drawHighlights(boxes)
-    this.render(this.current)
+    this.locate = () => this.scrollToSelection()
+    this.render(sel, (body) => this.onSelect?.(sel, body))
   }
 
-  /** Kept for callers that resize content; the panel lays itself out. */
-  relayout(): void {}
+  /**
+   * Shows a saved stuck point in the panel (no live selection). `locate`
+   * brings its passage into view; `fill` receives the card body.
+   */
+  openSaved(info: { text: string; pageStart: number; pageEnd: number }, locate: () => void, fill: (body: HTMLElement) => void): void {
+    if (!this.card.hidden) this.onHide?.()
+    this.current = null
+    this.highlights.replaceChildren()
+    this.locate = locate
+    this.render(info, fill)
+  }
 
-  private render(s: StuckSelection): void {
+  private render(s: { text: string; pageStart: number; pageEnd: number }, fill: (body: HTMLElement) => void): void {
     const pages = s.pageStart === s.pageEnd ? `p.${s.pageStart}` : `pp.${s.pageStart}–${s.pageEnd}`
     this.card.innerHTML = `
       <div class="sp-head">
@@ -116,12 +132,12 @@ export class SelectionPopup {
       <div class="sp-body"></div>`
     this.card.querySelector('.sp-quote')!.textContent = truncate(s.text, 280)
     this.card.querySelector('.sp-close')!.addEventListener('click', () => this.hide())
-    this.card.querySelector('.sp-tag')!.addEventListener('click', () => this.scrollToSelection())
+    this.card.querySelector('.sp-tag')!.addEventListener('click', () => this.locate())
 
     const body = this.card.querySelector<HTMLElement>('.sp-body')!
     this.card.hidden = false
     if (this.emptyHint) this.emptyHint.hidden = true
-    this.onSelect?.(s, body)
+    fill(body)
   }
 
   /** Brings the highlighted passage back into view. */

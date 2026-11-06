@@ -99,6 +99,8 @@ export function renderMarkdown(md: string): string {
       continue
     }
     flushList()
+    // "**Label:** ..." lines (as in notes) each start their own paragraph.
+    if (/^\*\*[^*]+:\*\*/.test(line.trim())) flushPara()
     para.push(line.trim())
   }
   flushPara()

@@ -1,5 +1,8 @@
 import './style.css'
-import { startExplain } from './explainUi'
+import { startConversation } from './explainUi'
+import { jumpTo } from './locate'
+import { getNotesStore, type StuckRecord } from './notes'
+import { StuckPoints } from './stuckPoints'
 import { getLibrary, type PaperMeta } from './library'
 import { Reader } from './reader'
 import { SelectionPopup } from './selection'
@@ -35,6 +38,7 @@ function setPanel(open: boolean): void {
   // The viewer changed width: let pdf.js refit, then redraw the highlight.
   window.dispatchEvent(new Event('resize'))
   setTimeout(() => popup.refreshHighlight(), 300)
+  refreshMarkersSoon()
 }
 panelBtn.addEventListener('click', () => setPanel(document.body.classList.contains('panel-closed')))
 try {
@@ -43,20 +47,38 @@ try {
   /* ignore */
 }
 
-// Selecting a passage asks Claude for an explanation (see explainUi.ts).
+// Selecting a passage asks Claude for an explanation (see explainUi.ts);
+// each explained passage becomes a stuck point that can be reopened.
+const notesStore = getNotesStore()
 let cancelExplain: (() => void) | null = null
+const conversationDeps = () => ({
+  reader,
+  container,
+  title: () => fileName.textContent ?? 'paper',
+  paperId: () => currentId,
+  store: notesStore,
+  onRecord: (rec: StuckRecord) => stuck.upsert(rec)
+})
 popup.onSelect = (sel, body) => {
   cancelExplain?.()
-  cancelExplain = startExplain(sel, body, {
-    reader,
-    container,
-    title: () => fileName.textContent ?? 'paper',
-    relayout: () => popup.relayout()
-  })
+  cancelExplain = startConversation({ sel }, body, conversationDeps())
 }
 popup.onHide = () => {
   cancelExplain?.()
   cancelExplain = null
+}
+const openStuck = (rec: StuckRecord): void => {
+  const locate = (): void => void jumpTo(reader, container, rec.page, rec.quote)
+  popup.openSaved({ text: rec.quote, pageStart: rec.page, pageEnd: rec.pageEnd }, locate, (body) => {
+    cancelExplain?.()
+    cancelExplain = startConversation({ record: rec }, body, conversationDeps())
+  })
+  locate()
+}
+const stuck = new StuckPoints({ container, store: notesStore, open: openStuck })
+const refreshMarkersSoon = (): void => {
+  setTimeout(() => stuck.renderMarkers(), 150)
+  setTimeout(() => stuck.renderMarkers(), 700)
 }
 
 const reader = new Reader(container, $<HTMLDivElement>('viewer'), {
@@ -69,8 +91,10 @@ const reader = new Reader(container, $<HTMLDivElement>('viewer'), {
     // Highlight positions are stale after a zoom; redraw once pages re-render.
     setTimeout(() => popup.refreshHighlight(), 150)
     setTimeout(() => popup.refreshHighlight(), 700)
+    refreshMarkersSoon()
     saveViewSoon()
-  }
+  },
+  onTextLayer: () => stuck.renderMarkers()
 })
 
 // --- Remember where the reader is in each paper ---------------------------------
@@ -92,6 +116,7 @@ async function openPaper(meta: PaperMeta, data?: Uint8Array): Promise<void> {
     currentId = null // don't save view changes caused by loading
     await reader.open(bytes, meta.view)
     currentId = meta.id
+    stuck.load(meta.id)
     fileName.textContent = meta.name
     document.title = `${meta.name} — Unstuck`
     emptyState.hidden = true
