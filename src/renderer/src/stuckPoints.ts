@@ -25,10 +25,16 @@ interface Spot {
   aspect: number
 }
 
-/** Dot diameter relative to the passage's line height (stays within the line). */
-const DOT_OF_LINE = 0.7
-/** Gap between the dot and the text, relative to the dot size. */
-const GAP_OF_DOT = 0.6
+/** Dot diameter relative to the passage's line height. */
+const DOT_OF_LINE = 0.6
+/**
+ * The dot sits diagonally up-left of the passage's first character, mostly in
+ * the space before the word and the gap above the line, so it never covers
+ * glyphs. These are how far it overlaps the passage's corner (fractions of
+ * the dot size).
+ */
+const OVERLAP_X = 0.15
+const OVERLAP_Y = 0.25
 
 export class StuckPoints {
   private records: StuckRecord[] = []
@@ -56,7 +62,8 @@ export class StuckPoints {
     this.renderMarkers()
   }
 
-  private async remove(rec: StuckRecord): Promise<void> {
+  /** Deletes a stuck point with its conversation and note. */
+  async remove(rec: StuckRecord): Promise<void> {
     if (!this.paperId) return
     await this.deps.store.remove(this.paperId, rec.id)
     this.records = this.records.filter((r) => r.id !== rec.id)
@@ -136,14 +143,14 @@ export class StuckPoints {
       m.className = `stuck-marker ${rec.status}`
       m.title = rec.status === 'understood' ? '이해한 곳 · 노트 보기' : '막혔던 곳 · 대화 다시 보기'
       // Sized from the first line's height, all in percent of the page, so the
-      // dot scales with the text when zooming. Left of the passage, centred
-      // on its first line.
+      // dot scales with the text when zooming.
       const h = (s.bottom - s.top) * DOT_OF_LINE // fraction of page height
       const w = h * s.aspect // the same length as a fraction of page width
-      const left = Math.max(0.004, s.left - w * (1 + GAP_OF_DOT))
+      const left = Math.max(0.002, s.left - w * (1 - OVERLAP_X))
+      const top = Math.max(0.002, s.top - h * (1 - OVERLAP_Y))
       Object.assign(m.style, {
         left: `${left * 100}%`,
-        top: `${((s.top + s.bottom) / 2 - h / 2) * 100}%`,
+        top: `${top * 100}%`,
         width: `${w * 100}%`,
         height: `${h * 100}%`
       })

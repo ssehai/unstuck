@@ -127,7 +127,8 @@ export class SelectionPopup {
     this.card.innerHTML = `
       <div class="sp-head">
         <button class="sp-tag" title="Show the selection in the paper">Stuck here · ${pages}</button>
-        <button class="sp-close" title="Clear (Esc)">×</button>
+        <span class="sp-actions"></span>
+        <button class="sp-close" title="Close (Esc)">×</button>
       </div>
       <blockquote class="sp-quote"></blockquote>
       <div class="sp-body"></div>`

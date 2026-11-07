@@ -24,6 +24,8 @@ export interface ExplainDeps {
   store: NotesStore
   /** Called whenever a stuck point is created or changes. */
   onRecord: (rec: StuckRecord) => void
+  /** Delete a stuck point (and close the panel). */
+  onDelete: (rec: StuckRecord) => void
 }
 
 const FOLLOW_UP_LABELS: Record<Exclude<FollowUpKind, 'question'>, string> = {
@@ -88,6 +90,20 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
     e.auth
       ? 'Claude CLI is not logged in. Open Terminal, run `claude`, and log in with /login. Then try again.'
       : `Something went wrong: ${e.message}`
+
+  // "기록 삭제" in the card header, once this passage has a saved record.
+  const actions = body.closest('.stuck-card')?.querySelector<HTMLElement>('.sp-actions')
+  const showDelete = (): void => {
+    if (!actions || !record || actions.querySelector('.sp-delete')) return
+    const del = document.createElement('button')
+    del.className = 'sp-delete'
+    del.textContent = '기록 삭제'
+    del.title = '이 막힘 기록(대화·노트·점)을 지워요'
+    del.addEventListener('click', () => {
+      if (record && confirm('이 막힘 기록과 대화·노트를 삭제할까요?')) deps.onDelete(record)
+    })
+    actions.appendChild(del)
+  }
 
   const save = async (): Promise<void> => {
     if (!record) return
@@ -280,6 +296,9 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
       })
       if (record.note) showNote(record.note, record.status !== 'understood')
       syncGotIt()
+      showDelete()
+      // An understood point opens on its note.
+      if (record.status === 'understood' && record.note) requestAnimationFrame(() => scrollTo(noteSlot))
       composer.hidden = !record.sessionId
       setBusy(false)
       return
@@ -329,6 +348,7 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
       status: 'open'
     }
     await save()
+    showDelete()
     setBusy(false)
   })()
 

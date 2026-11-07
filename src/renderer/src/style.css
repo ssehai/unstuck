@@ -880,8 +880,14 @@ body.panel-closed #sidePanel {
   background: #2e9e5b;
 }
 
-.stuck-marker:hover {
-  transform: scale(1.35);
+.unstuck-overlay .stuck-marker {
+  opacity: 0.45;
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.unstuck-overlay .stuck-marker:hover {
+  opacity: 1;
+  transform: scale(1.3);
 }
 
 .sp-quick .spacer {
@@ -1109,4 +1115,26 @@ body.panel-closed #sidePanel {
 /* In evaluation mode there is nothing to follow up on in the panel. */
 body.eval-mode .sp-composer {
   display: none;
+}
+
+.sp-actions {
+  margin-left: auto;
+  margin-right: 4px;
+}
+
+.sp-delete {
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.sp-delete:hover {
+  color: #b3261e;
+  border-color: #f0c4c0;
+  background: #fdf0ef;
 }

@@ -56,7 +56,11 @@ const conversationDeps = () => ({
   title: () => fileName.textContent ?? 'paper',
   paperId: () => currentId,
   store: notesStore,
-  onRecord: (rec: StuckRecord) => stuck.upsert(rec)
+  onRecord: (rec: StuckRecord) => stuck.upsert(rec),
+  onDelete: (rec: StuckRecord) => {
+    popup.hide()
+    void stuck.remove(rec)
+  }
 })
 popup.onSelect = (sel, body) => {
   cancelExplain?.()
