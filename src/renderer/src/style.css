@@ -1155,3 +1155,48 @@ body.eval-mode .sp-composer {
 .marker-menu button.danger:hover {
   background: #fdf0ef;
 }
+
+/* Pending selection (not asked yet) and its ask button. */
+.stuck-hl.pending {
+  background: rgba(255, 196, 0, 0.28);
+}
+
+.unstuck-overlay .ask-btn {
+  position: absolute;
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  font: 600 12.5px -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', sans-serif;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 999px;
+  padding: 5px 11px 5px 6px;
+  box-shadow: 0 4px 12px rgba(20, 20, 18, 0.18);
+  cursor: pointer;
+  z-index: 2;
+  animation: ask-in 0.12s ease-out;
+}
+
+.unstuck-overlay .ask-btn:hover {
+  background: #2760c4;
+}
+
+.ask-q {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  font-size: 12px;
+}
+
+@keyframes ask-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}

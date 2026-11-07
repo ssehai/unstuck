@@ -15,17 +15,26 @@ export interface StuckSelection {
 const MIN_CHARS = 2
 
 /**
- * Handles selection inside the PDF viewer. The highlight is drawn on the page
- * (inside the scroll container, so it scrolls with the text); the card with
- * the explanation lives in the side panel, so it never covers the paper.
+ * Handles selection inside the PDF viewer.
+ *
+ * Selecting a passage only marks it as *pending*, with a small "질문하기"
+ * button at its end; the question starts when that button (or Enter) is
+ * pressed. A click elsewhere or Esc drops the pending selection.
+ *
+ * Highlights are drawn on the page (in percent of the page, see overlay.ts);
+ * the card with the explanation lives in the side panel.
  */
 export class SelectionPopup {
   private readonly container: HTMLElement
   private readonly card: HTMLDivElement
   private readonly emptyHint: HTMLElement | null
-  /** The highlight, as page fractions; drawn inside each page's text layer. */
+  /** The asked passage's highlight, as page fractions. */
   private hl: PageBox[] = []
   private current: StuckSelection | null = null
+  /** Selected but not asked about yet. */
+  private pending: { sel: StuckSelection; boxes: PageBox[] } | null = null
+  /** Highlight shown while dragging. */
+  private draft: PageBox[] = []
   onSelect?: (sel: StuckSelection, body: HTMLElement) => void
   onHide?: () => void
   private locate: () => void = () => undefined
@@ -42,13 +51,21 @@ export class SelectionPopup {
     // The explanation stays in the panel until a new passage is selected or
     // it is cleared (× / Esc); a stray click on the page doesn't lose it.
     installDragSelect(container, {
-      isIgnored: () => false,
-      onStart: () => undefined,
+      isIgnored: (t) => !!t.closest('.ask-btn'),
+      onStart: () => this.clearPending(),
       onUpdate: (raw) => this.preview(raw),
-      onEnd: (raw) => (raw ? this.commit(raw) : this.refreshHighlight())
+      // A plain click (no drag) just drops a pending selection.
+      onEnd: (raw) => (raw ? this.commit(raw) : this.clearDraft())
     })
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') this.hide()
+      const typing = (e.target as HTMLElement | null)?.closest?.('textarea, input')
+      if (e.key === 'Escape') {
+        if (this.pending) this.clearPending()
+        else this.hide()
+      } else if (e.key === 'Enter' && this.pending && !typing && !e.isComposing) {
+        e.preventDefault()
+        this.ask()
+      }
     })
   }
 
@@ -70,12 +87,12 @@ export class SelectionPopup {
   }
 
   /**
-   * Redraws the stored highlight (e.g. after a cancelled drag, or when pdf.js
-   * re-created a page's text layer). Zooming needs nothing: the boxes are in
-   * percent of the page and scale with it.
+   * Redraws the stored highlights (e.g. when pdf.js re-created a page). Zooming
+   * needs nothing: the boxes are in percent of the page and scale with it.
    */
   refreshHighlight(): void {
     this.renderHighlights()
+    this.renderPending()
   }
 
   /** Highlights a saved passage (reopened from the stuck-point list). */
@@ -86,25 +103,48 @@ export class SelectionPopup {
   /** Live highlight while dragging, already snapped to whole words. */
   private preview(raw: Range): void {
     const range = snapToWords(raw, this.container)
-    this.drawHighlights(range ? selectionBoxes(range, this.container) : [])
+    this.draft = range ? toPageBoxes(selectionBoxes(range, this.container), this.container) : []
+    this.renderPending()
   }
 
-  /** Finalize a selection: snap to words, highlight, fill the panel. */
+  private clearDraft(): void {
+    this.draft = []
+    this.clearPending()
+  }
+
+  /** Drops a selection that was not asked about. */
+  clearPending(): void {
+    this.pending = null
+    this.draft = []
+    this.renderPending()
+  }
+
+  /** Finalize a selection: snap to words and offer the "질문하기" button. */
   commit(raw: Range): void {
+    this.draft = []
     const range = snapToWords(raw, this.container)
-    if (!range) return this.refreshHighlight()
+    if (!range) return this.clearPending()
     const startPage = pageOf(range.startContainer)
     const endPage = pageOf(range.endContainer)
     const boxes = selectionBoxes(range, this.container)
     const text = rangeText(range, this.container)
     if (startPage === null || endPage === null || boxes.length === 0 || text.length < MIN_CHARS) {
-      return this.refreshHighlight()
+      return this.clearPending()
     }
+    this.pending = { sel: { text, pageStart: startPage, pageEnd: endPage, range }, boxes: toPageBoxes(boxes, this.container) }
+    this.renderPending()
+  }
 
+  /** Starts the question about the pending selection. */
+  ask(): void {
+    if (!this.pending) return
+    const { sel, boxes } = this.pending
+    this.pending = null
+    this.renderPending()
     if (!this.card.hidden) this.onHide?.() // stop the previous explanation
-    const sel: StuckSelection = { text, pageStart: startPage, pageEnd: endPage, range }
     this.current = sel
-    this.drawHighlights(boxes)
+    this.hl = boxes
+    this.renderHighlights()
     this.locate = () => this.scrollToSelection()
     this.render(sel, (body) => this.onSelect?.(sel, body))
   }
@@ -115,6 +155,7 @@ export class SelectionPopup {
    */
   openSaved(info: { text: string; pageStart: number; pageEnd: number }, locate: () => void, fill: (body: HTMLElement) => void): void {
     if (!this.card.hidden) this.onHide?.()
+    this.clearPending()
     this.current = null
     this.hl = []
     this.renderHighlights()
@@ -153,6 +194,34 @@ export class SelectionPopup {
   private drawHighlights(boxes: Box[]): void {
     this.hl = toPageBoxes(boxes, this.container)
     this.renderHighlights()
+  }
+
+  /** The dragged / pending highlight, plus the ask button at its end. */
+  private renderPending(): void {
+    clearOverlays(this.container, 'pending')
+    const boxes = this.pending ? this.pending.boxes : this.draft
+    for (const b of boxes) {
+      const overlay = pageOverlay(this.container, b.page, 'pending')
+      if (!overlay) continue
+      const d = document.createElement('div')
+      d.className = 'stuck-hl pending'
+      placeBox(d, b, 1)
+      overlay.appendChild(d)
+    }
+    if (!this.pending || boxes.length === 0) return
+    // The button sits just below the end of the last line.
+    const last = boxes[boxes.length - 1]
+    const overlay = pageOverlay(this.container, last.page, 'pending')
+    if (!overlay) return
+    const btn = document.createElement('button')
+    btn.className = 'ask-btn'
+    btn.innerHTML = '<span class="ask-q">?</span>질문하기'
+    btn.title = '이 구절에 대해 질문하기 (Enter)'
+    btn.style.left = `calc(${(last.left + last.width) * 100}% - 14px)`
+    btn.style.top = `calc(${(last.top + last.height) * 100}% + 4px)`
+    btn.addEventListener('mousedown', (e) => e.stopPropagation())
+    btn.addEventListener('click', () => this.ask())
+    overlay.appendChild(btn)
   }
 
   private renderHighlights(): void {
