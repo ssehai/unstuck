@@ -13,6 +13,8 @@ interface Deps {
   container: HTMLElement
   store: NotesStore
   open: (rec: StuckRecord) => void
+  /** Called after a stuck point was deleted. */
+  onDeleted?: (rec: StuckRecord) => void
 }
 
 /** Where a passage sits, as fractions of its page (survives zooming). */
@@ -70,6 +72,48 @@ export class StuckPoints {
     this.spots.delete(rec.id)
     this.renderList()
     this.renderMarkers()
+    this.deps.onDeleted?.(rec)
+  }
+
+  /** A small right-click menu for a dot: open it, or delete the record. */
+  private showMenu(rec: StuckRecord, x: number, y: number): void {
+    document.querySelector('.marker-menu')?.remove()
+    const menu = document.createElement('div')
+    menu.className = 'marker-menu'
+    menu.innerHTML = `
+      <button data-act="open">${rec.status === 'understood' ? '노트 보기' : '대화 다시 보기'}</button>
+      <button data-act="delete" class="danger">기록 삭제</button>`
+    document.body.appendChild(menu)
+    // Keep it inside the window.
+    const r = menu.getBoundingClientRect()
+    menu.style.left = `${Math.min(x, innerWidth - r.width - 8)}px`
+    menu.style.top = `${Math.min(y, innerHeight - r.height - 8)}px`
+
+    const close = (): void => {
+      menu.remove()
+      document.removeEventListener('mousedown', onOutside, true)
+      document.removeEventListener('keydown', onKey, true)
+      this.deps.container.removeEventListener('scroll', close)
+    }
+    const onOutside = (e: MouseEvent): void => {
+      if (!menu.contains(e.target as Node)) close()
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        close()
+      }
+    }
+    document.addEventListener('mousedown', onOutside, true)
+    document.addEventListener('keydown', onKey, true)
+    this.deps.container.addEventListener('scroll', close, { once: true })
+    menu.addEventListener('click', (e) => {
+      const act = (e.target as HTMLElement).closest<HTMLButtonElement>('button')?.dataset.act
+      if (!act) return
+      close()
+      if (act === 'open') this.deps.open(rec)
+      else void this.remove(rec)
+    })
   }
 
   // --- Panel list ---------------------------------------------------------------
@@ -141,7 +185,7 @@ export class StuckPoints {
       if (!s || !overlay) continue
       const m = document.createElement('button')
       m.className = `stuck-marker ${rec.status}`
-      m.title = rec.status === 'understood' ? '이해한 곳 · 노트 보기' : '막혔던 곳 · 대화 다시 보기'
+      m.title = (rec.status === 'understood' ? '이해한 곳 · 노트 보기' : '막혔던 곳 · 대화 다시 보기') + ' (오른쪽 클릭: 메뉴)'
       // Sized from the first line's height, all in percent of the page, so the
       // dot scales with the text when zooming.
       const h = (s.bottom - s.top) * DOT_OF_LINE // fraction of page height
@@ -156,6 +200,11 @@ export class StuckPoints {
       })
       m.addEventListener('mousedown', (e) => e.stopPropagation()) // not a text selection
       m.addEventListener('click', () => this.deps.open(rec))
+      m.addEventListener('contextmenu', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        this.showMenu(rec, e.clientX, e.clientY)
+      })
       overlay.appendChild(m)
     }
   }

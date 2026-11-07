@@ -56,12 +56,13 @@ const conversationDeps = () => ({
   title: () => fileName.textContent ?? 'paper',
   paperId: () => currentId,
   store: notesStore,
-  onRecord: (rec: StuckRecord) => stuck.upsert(rec),
-  onDelete: (rec: StuckRecord) => {
-    popup.hide()
-    void stuck.remove(rec)
+  onRecord: (rec: StuckRecord) => {
+    shownRecordId = rec.id
+    stuck.upsert(rec)
   }
 })
+/** The stuck point currently shown in the panel, if any. */
+let shownRecordId: string | null = null
 popup.onSelect = (sel, body) => {
   cancelExplain?.()
   cancelExplain = evalMode
@@ -83,8 +84,10 @@ evalBadge.addEventListener('click', () => setEvalMode(false))
 popup.onHide = () => {
   cancelExplain?.()
   cancelExplain = null
+  shownRecordId = null
 }
 const openStuck = (rec: StuckRecord): void => {
+  shownRecordId = rec.id
   // Go to the passage and show it highlighted, as when it was first selected.
   const locate = async (): Promise<void> => {
     const range = await jumpTo(reader, container, rec.page, rec.quote, { flash: false })
@@ -102,7 +105,15 @@ const openStuck = (rec: StuckRecord): void => {
   })
   locate()
 }
-const stuck = new StuckPoints({ container, store: notesStore, open: openStuck })
+const stuck = new StuckPoints({
+  container,
+  store: notesStore,
+  open: openStuck,
+  // Deleting the stuck point that is open in the panel closes the panel.
+  onDeleted: (rec) => {
+    if (shownRecordId === rec.id) popup.hide()
+  }
+})
 
 const reader = new Reader(container, $<HTMLDivElement>('viewer'), {
   onPageChange: (page, total) => {
