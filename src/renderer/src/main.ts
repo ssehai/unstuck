@@ -26,12 +26,28 @@ let currentId: string | null = null
 
 const popup = new SelectionPopup(container, $('sidePanel'))
 
-// --- Side panel: shown by default, toggled with the toolbar button or ⌘\ ---------
+// --- Side panel ------------------------------------------------------------------
+// Shown by default; toggled with the toolbar button or ⌘← / ⌘→, resized by
+// dragging its left edge. Its slide is animated in JS so the PDF can be
+// rescaled on the very same frames (see Reader.beginResize).
 const panelBtn = $<HTMLButtonElement>('panelBtn')
+const sidePanel = $('sidePanel')
+const PANEL_MIN = 300
+const panelMax = (): number => Math.max(PANEL_MIN, Math.round(innerWidth * 0.6))
+let panelW = Math.round(Math.min(460, Math.max(320, innerWidth * 0.32)))
+let panelShown = 0 // how many px of the panel are on screen (0 … panelW)
 const panelOpen = (): boolean => !document.body.classList.contains('panel-closed')
+
+function layoutPanel(): void {
+  sidePanel.style.width = `${panelW}px`
+  sidePanel.style.transform = `translateX(${panelW - panelShown}px)`
+  sidePanel.style.visibility = panelShown > 0 ? 'visible' : 'hidden'
+  container.style.right = `${panelShown}px`
+}
+
+let slideFrame = 0
 function setPanel(open: boolean): void {
   if (open === panelOpen()) return
-  const finishResize = reader.beginResize()
   document.body.classList.toggle('panel-closed', !open)
   panelBtn.setAttribute('aria-pressed', String(open))
   try {
@@ -39,29 +55,59 @@ function setPanel(open: boolean): void {
   } catch {
     /* storage unavailable: fine */
   }
-  // The panel slides in/out (CSS transition). Once the viewer has its new
-  // width, refit the pages (or keep the zoomed view centred). Overlays follow
-  // on their own.
-  const viewer = $('viewerContainer')
-  let done = false
-  let tries = 0
-  const refit = (e?: TransitionEvent): void => {
-    if (done || (e && e.propertyName !== 'right')) return
-    // Only measure once the slide has really finished.
-    const sliding = viewer.getAnimations().some((a) => a.playState === 'running')
-    if (sliding && tries++ < 30) {
-      setTimeout(() => refit(), 80)
-      return
-    }
-    done = true
-    viewer.removeEventListener('transitionend', refit)
-    finishResize()
+  const resize = reader.beginResize()
+  const from = panelShown
+  const to = open ? panelW : 0
+  const start = performance.now()
+  const DURATION = 260
+  cancelAnimationFrame(slideFrame)
+  const step = (now: number): void => {
+    const t = document.hidden ? 1 : Math.min(1, (now - start) / DURATION)
+    const eased = 1 - Math.pow(1 - t, 3)
+    panelShown = from + (to - from) * eased
+    layoutPanel()
+    resize.update()
+    if (t < 1) slideFrame = requestAnimationFrame(step)
+    else resize.finish()
   }
-  viewer.addEventListener('transitionend', refit)
-  setTimeout(() => refit(), 450) // in case no transitionend arrives
+  slideFrame = requestAnimationFrame(step)
 }
 panelBtn.addEventListener('click', () => setPanel(!panelOpen()))
+
+// Drag the panel's left edge to resize it.
+const resizer = document.createElement('div')
+resizer.className = 'panel-resizer'
+resizer.title = 'Drag to resize'
+sidePanel.appendChild(resizer)
+resizer.addEventListener('mousedown', (e) => {
+  e.preventDefault()
+  const startX = e.clientX
+  const startW = panelW
+  const resize = reader.beginResize()
+  document.body.classList.add('resizing-panel')
+  const onMove = (ev: MouseEvent): void => {
+    panelW = Math.min(panelMax(), Math.max(PANEL_MIN, startW + (startX - ev.clientX)))
+    panelShown = panelW
+    layoutPanel()
+    resize.update()
+  }
+  const onUp = (): void => {
+    document.removeEventListener('mousemove', onMove)
+    document.body.classList.remove('resizing-panel')
+    resize.finish()
+    try {
+      localStorage.setItem('unstuck.panelWidth', String(panelW))
+    } catch {
+      /* ignore */
+    }
+  }
+  document.addEventListener('mousemove', onMove)
+  document.addEventListener('mouseup', onUp, { once: true })
+})
+
 try {
+  const w = Number(localStorage.getItem('unstuck.panelWidth'))
+  if (w >= PANEL_MIN) panelW = Math.min(panelMax(), w)
   if (localStorage.getItem('unstuck.panel') === 'closed') {
     document.body.classList.add('panel-closed')
     panelBtn.setAttribute('aria-pressed', 'false')
@@ -69,49 +115,48 @@ try {
 } catch {
   /* ignore */
 }
+panelShown = panelOpen() ? panelW : 0
+layoutPanel()
+addEventListener('resize', () => {
+  const w = Math.min(panelMax(), Math.max(PANEL_MIN, panelW))
+  if (panelShown === panelW) panelShown = w
+  panelW = w
+  layoutPanel()
+})
 
-// --- Settings: text size of the explanation panel ---------------------------------
-const settingsBtn = $<HTMLButtonElement>('settingsBtn')
-const settingsPanel = $('settingsPanel')
+// --- Panel text size (View menu, ⌘⇧+ / ⌘⇧−) ----------------------------------------
 const FONT_STEPS = [0.85, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.55]
 let fontScale = 1
 function setPanelFont(scale: number): void {
   fontScale = scale
   document.documentElement.style.setProperty('--panel-zoom', String(scale))
-  $('fontLabel').textContent = `${Math.round(scale * 100)}%`
   try {
     localStorage.setItem('unstuck.panelFont', String(scale))
   } catch {
     /* ignore */
   }
 }
-const stepFont = (dir: 1 | -1): void => {
+function stepFont(dir: 1 | -1): void {
   const i = FONT_STEPS.findIndex((v) => v >= fontScale - 1e-6)
-  const next = FONT_STEPS[Math.max(0, Math.min(FONT_STEPS.length - 1, (i < 0 ? FONT_STEPS.length - 1 : i) + dir))]
-  setPanelFont(next)
+  setPanelFont(FONT_STEPS[Math.max(0, Math.min(FONT_STEPS.length - 1, (i < 0 ? FONT_STEPS.length - 1 : i) + dir))])
 }
-$('fontUp').addEventListener('click', () => stepFont(1))
-$('fontDown').addEventListener('click', () => stepFont(-1))
-$('fontReset').addEventListener('click', () => setPanelFont(1))
 try {
   const saved = Number(localStorage.getItem('unstuck.panelFont'))
   setPanelFont(saved > 0 ? saved : 1)
 } catch {
   setPanelFont(1)
 }
-settingsBtn.addEventListener('click', (e) => {
-  e.stopPropagation()
-  if (!settingsPanel.hidden) {
-    settingsPanel.hidden = true
-    return
-  }
-  const r = settingsBtn.getBoundingClientRect()
-  settingsPanel.style.right = `${Math.max(8, innerWidth - r.right)}px`
-  settingsPanel.hidden = false
+
+// --- Preferences (app menu, ⌘,) ------------------------------------------------------
+// Nothing to configure yet; the window is the place for future settings.
+const prefs = $('prefsDialog')
+function openPreferences(): void {
+  prefs.hidden = false
+}
+prefs.addEventListener('mousedown', (e) => {
+  if (e.target === prefs) prefs.hidden = true // click on the backdrop
 })
-document.addEventListener('mousedown', (e) => {
-  if (!settingsPanel.hidden && !settingsPanel.contains(e.target as Node) && !settingsBtn.contains(e.target as Node)) settingsPanel.hidden = true
-})
+prefs.querySelector('.prefs-close')!.addEventListener('click', () => (prefs.hidden = true))
 
 // Selecting a passage asks Claude for an explanation (see explainUi.ts);
 // each explained passage becomes a stuck point that can be reopened.
@@ -414,12 +459,33 @@ function zoomCommand(cmd: 'in' | 'out' | 'fit'): void {
 }
 window.unstuckApi?.onMenu?.((cmd) => {
   if (cmd === 'toggle-eval') setEvalMode(!evalMode)
+  else if (cmd === 'preferences') openPreferences()
+  else if (cmd === 'panel-font-up') stepFont(1)
+  else if (cmd === 'panel-font-down') stepFont(-1)
+  else if (cmd === 'panel-font-reset') setPanelFont(1)
   else if (cmd === 'zoom-in') zoomCommand('in')
   else if (cmd === 'zoom-out') zoomCommand('out')
   else if (cmd === 'zoom-fit') zoomCommand('fit')
 })
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !prefs.hidden) {
+    prefs.hidden = true
+    return
+  }
   if (!(e.metaKey || e.ctrlKey) || e.altKey) return
+  // In Electron the menu handles these; this is the plain-browser fallback.
+  if (!window.unstuckApi && e.key === ',') {
+    e.preventDefault()
+    return openPreferences()
+  }
+  if (e.shiftKey) {
+    if (window.unstuckApi) return
+    if (e.key === '+' || e.key === '=') stepFont(1)
+    else if (e.key === '_' || e.key === '-') stepFont(-1)
+    else return
+    e.preventDefault()
+    return
+  }
   if (e.key === '=' || e.key === '+') zoomCommand('in')
   else if (e.key === '-' || e.key === '_') zoomCommand('out')
   else if (e.key === '0') zoomCommand('fit')

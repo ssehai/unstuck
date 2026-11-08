@@ -22,14 +22,6 @@
         <button id="zoomIn" class="btn icon" title="Zoom in" disabled>+</button>
         <button id="fitWidth" class="btn" title="Fit to width" disabled>Fit</button>
       </div>
-      <button id="settingsBtn" class="icon-btn" title="Settings" aria-label="Settings">
-        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-          <!-- a gear: teeth drawn as a dashed thick ring -->
-          <circle cx="12" cy="12" r="8.2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-dasharray="3.2 3.24" />
-          <circle cx="12" cy="12" r="6.4" fill="none" stroke="currentColor" stroke-width="1.8" />
-          <circle cx="12" cy="12" r="2.4" fill="none" stroke="currentColor" stroke-width="1.8" />
-        </svg>
-      </button>
       <button id="panelBtn" class="icon-btn panel-toggle" title="Show/hide explanation panel (⌘← / ⌘→)" aria-label="Explanation panel" aria-pressed="true">
         <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
           <!-- a window with a sidebar on the right; the sidebar is filled when the panel is open -->
@@ -41,16 +33,13 @@
       <input id="fileInput" type="file" accept="application/pdf,.pdf" hidden />
     </header>
 
-    <div id="settingsPanel" class="settings-panel" hidden>
-      <div class="lp-head">Settings</div>
-      <div class="set-row">
-        <span>패널 글자 크기</span>
-        <div class="set-ctrl">
-          <button id="fontDown" class="btn icon" title="Smaller">−</button>
-          <span id="fontLabel" class="set-val">100%</span>
-          <button id="fontUp" class="btn icon" title="Larger">+</button>
-          <button id="fontReset" class="btn" title="Reset">기본</button>
+    <div id="prefsDialog" class="prefs-backdrop" hidden>
+      <div class="prefs" role="dialog" aria-label="Preferences">
+        <div class="prefs-head">
+          <span>Preferences</span>
+          <button class="prefs-close" title="Close (Esc)">×</button>
         </div>
+        <p class="muted">설정할 항목이 아직 없어요. 패널 글자 크기는 View 메뉴(⌘⇧+ / ⌘⇧−)에 있어요.</p>
       </div>
     </div>
 

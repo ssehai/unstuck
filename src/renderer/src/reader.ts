@@ -185,23 +185,38 @@ export class Reader {
   private pinchLast = 0
 
   /**
-   * Call before the viewer's width changes (e.g. the side panel slides).
-   * Returns a function to call afterwards: if the whole page width was
-   * visible before, the pages are refit to the new width; if the reader had
-   * zoomed in, the zoom is kept and the point at the centre of the view
-   * stays at the centre.
+   * Call before the viewer's width starts changing (the side panel slides or
+   * is resized). `update()` is called on every frame of the change and
+   * `finish()` once at the end:
+   * - if the whole page width was visible, the pages keep fitting the width
+   *   while it changes (scaled with CSS, re-rendered sharply at the end);
+   * - if the reader had zoomed in, the zoom is kept and the point at the
+   *   centre of the view stays at the centre.
    */
-  beginResize(): () => void {
-    if (!this.doc) return () => undefined
+  beginResize(): { update(): void; finish(): void } {
+    const none = { update: () => undefined, finish: () => undefined }
+    if (!this.doc) return none
     const c = this.container
     const page = c.querySelector<HTMLElement>('.page')
     const fitted = this.viewer.currentScaleValue === 'page-width' || (!!page && page.offsetWidth <= c.clientWidth + 2)
     const centreX = (c.scrollLeft + c.clientWidth / 2) / Math.max(1, c.scrollWidth)
-    return () => {
-      if (fitted) {
-        this.viewer.currentScaleValue = 'page-width'
-      } else {
-        c.scrollLeft = centreX * c.scrollWidth - c.clientWidth / 2
+    const s0 = this.viewer.currentScale
+    const w0 = c.clientWidth
+    const PAD = 40 // pdf.js's horizontal padding for "page-width"
+    const keepCentre = (): void => {
+      c.scrollLeft = centreX * c.scrollWidth - c.clientWidth / 2
+    }
+    return {
+      update: () => {
+        if (!fitted) return keepCentre()
+        const target = (s0 * (c.clientWidth - PAD)) / Math.max(1, w0 - PAD)
+        const factor = target / this.viewer.currentScale
+        // drawingDelay: stretch what is drawn now, re-render once it settles.
+        if (Math.abs(factor - 1) > 0.004) this.viewer.updateScale({ scaleFactor: factor, drawingDelay: 300 })
+      },
+      finish: () => {
+        if (fitted) this.viewer.currentScaleValue = 'page-width'
+        else keepCentre()
       }
     }
   }

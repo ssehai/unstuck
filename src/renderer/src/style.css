@@ -340,27 +340,41 @@ body {
   z-index: 8;
 }
 
-/* The panel slides in from the right; the viewer narrows along with it. */
-#viewerContainer {
-  transition: right 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
+/* The panel's position and width are set from JS (main.ts) so the slide
+   and the PDF's rescaling run on the same frames. */
 #sidePanel {
-  transition:
-    transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1),
-    visibility 0s linear 0s;
-}
-
-body:not(.panel-closed) #viewerContainer {
-  right: var(--panel-w);
-}
-
-body.panel-closed #sidePanel {
   transform: translateX(100%);
-  visibility: hidden;
-  transition:
-    transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1),
-    visibility 0s linear 0.26s;
+}
+
+.panel-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 8px;
+  cursor: col-resize;
+  z-index: 2;
+}
+
+.panel-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.panel-resizer:hover::after,
+body.resizing-panel .panel-resizer::after {
+  background: var(--accent);
+}
+
+body.resizing-panel {
+  cursor: col-resize;
+  user-select: none;
 }
 
 /* Borderless icon buttons in the toolbar. */
@@ -1242,51 +1256,52 @@ body.eval-mode .sp-composer {
   }
 }
 
-/* ---------- Settings ---------- */
+/* ---------- Panel text size & Preferences ---------- */
 :root {
   --panel-zoom: 1;
 }
 
-/* Text size of the explanation panel (Settings). */
+/* Text size of the explanation panel (View menu). */
 .stuck-card,
 .panel-home {
   zoom: var(--panel-zoom);
 }
 
-.settings-panel {
+.prefs-backdrop {
   position: fixed;
-  top: calc(var(--toolbar-h) - 4px);
-  width: 300px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: var(--shadow);
-  z-index: 30;
-  padding: 6px 10px 12px;
-  font-size: 13px;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  background: rgba(20, 20, 18, 0.25);
 }
 
-.settings-panel[hidden] {
+.prefs-backdrop[hidden] {
   display: none;
 }
 
-.set-row {
+.prefs {
+  width: min(420px, calc(100vw - 32px));
+  background: var(--surface);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 14px 18px 18px;
+  font-size: 13px;
+}
+
+.prefs-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 6px 0 0;
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 8px;
 }
 
-.set-ctrl {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.set-val {
-  min-width: 42px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
+.prefs-close {
+  border: none;
+  background: none;
+  font-size: 18px;
   color: var(--muted);
+  cursor: pointer;
 }
