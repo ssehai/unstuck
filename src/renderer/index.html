@@ -22,9 +22,23 @@
         <button id="zoomIn" class="btn icon" title="Zoom in" disabled>+</button>
         <button id="fitWidth" class="btn" title="Fit to width" disabled>Fit</button>
       </div>
-      <button id="panelBtn" class="btn icon panel-toggle" title="Show/hide explanation panel (⌘\)" aria-pressed="true">▥</button>
+      <button id="settingsBtn" class="btn icon" title="Settings">⚙︎</button>
+      <button id="panelBtn" class="btn icon panel-toggle" title="Show/hide explanation panel (⌘→ / ⌘←)" aria-pressed="true">▥</button>
       <input id="fileInput" type="file" accept="application/pdf,.pdf" hidden />
     </header>
+
+    <div id="settingsPanel" class="settings-panel" hidden>
+      <div class="lp-head">Settings</div>
+      <div class="set-row">
+        <span>패널 글자 크기</span>
+        <div class="set-ctrl">
+          <button id="fontDown" class="btn icon" title="Smaller">−</button>
+          <span id="fontLabel" class="set-val">100%</span>
+          <button id="fontUp" class="btn icon" title="Larger">+</button>
+          <button id="fontReset" class="btn" title="Reset">기본</button>
+        </div>
+      </div>
+    </div>
 
     <div id="libraryPanel" class="library-panel" hidden>
       <div class="lp-head">Saved papers</div>

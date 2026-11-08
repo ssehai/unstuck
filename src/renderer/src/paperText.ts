@@ -55,34 +55,40 @@ async function extract(doc: PDFDocumentProxy): Promise<Paragraph[]> {
 }
 
 const REFERENCES_HEADING = /^(references|bibliography|literature cited)\b/i
-// "A Additional Experiment Results", "Appendix", "A.1 Proofs", "Supplementary Material"
-const APPENDIX_HEADING = /^(appendix|appendices|supplementary|[A-H](\.\d+)*\s+[A-Z][A-Za-z-]+)/
+// "Appendix", "Supplementary Material", or the first lettered section: "A MAPPO Details", "A.1 Proofs"
+const APPENDIX_HEADING = /^(appendix|appendices|supplementary\b|A(\.1)?\s+[A-Z][A-Za-z-]+)/
+/** Looks like an entry of a reference list. */
+const REFERENCE_ENTRY = /^\[\d+\]|\b(19|20)\d{2}[a-z]?\b.*\b(arXiv|Proceedings|Conference|Journal|Transactions|pp\.|In )|et al\./
 
 /**
- * Marks paragraphs as body, references, or appendix. References start at the
- * last "References" heading; an appendix starts at the first appendix-style
- * heading after it (or at an "Appendix" heading before it).
+ * Marks paragraphs as body, references, or appendix.
+ *
+ * - References start at the last "References" heading (after the first fifth
+ *   of the paper: a long appendix can push them well before the middle).
+ * - The appendix starts at the first appendix heading ("Appendix", or a
+ *   lettered section "A …") in the later part of the paper. It may come
+ *   before or after the references.
+ * - After the references, paragraphs that are not reference entries (figure
+ *   captions, tables) belong to the appendix when there is one; papers often
+ *   float appendix figures and tables past the reference list.
  */
 function labelSections(paras: Paragraph[]): void {
-  // The last "References" heading after the first fifth of the paper (a long
-  // appendix can push the references well before the middle).
-  const half = Math.floor(paras.length / 2)
-  const minRef = Math.floor(paras.length / 5)
+  const n = paras.length
   let refStart = -1
   paras.forEach((p, i) => {
-    if (i >= minRef && REFERENCES_HEADING.test(p.text.trim()) && p.text.length < 40) refStart = i
+    if (i >= n / 5 && REFERENCES_HEADING.test(p.text.trim()) && p.text.length < 40) refStart = i
   })
-  if (refStart < 0) refStart = paras.length
-  let appStart = paras.findIndex((p, i) => i > refStart && APPENDIX_HEADING.test(p.text.trim()) && p.text.length < 120)
-  if (appStart < 0) {
-    // Some papers put the appendix before the references.
-    const a = paras.findIndex((p, i) => i >= half && /^(appendix|appendices)\b/i.test(p.text.trim()) && p.text.length < 60)
-    appStart = a >= 0 && a < refStart ? a : -1
-  }
+  if (refStart < 0) refStart = n
+  const appStart = paras.findIndex((p, i) => i >= n * 0.3 && i !== refStart && p.text.length < 80 && APPENDIX_HEADING.test(p.text.trim()))
+
   paras.forEach((p, i) => {
     if (appStart >= 0 && appStart < refStart) {
-      p.section = i >= refStart ? 'references' : i >= appStart ? 'appendix' : 'body'
+      // body … appendix … references (+ floated appendix material)
+      if (i < appStart) p.section = 'body'
+      else if (i < refStart) p.section = 'appendix'
+      else p.section = i === refStart || REFERENCE_ENTRY.test(p.text) || p.text.length > 600 ? 'references' : 'appendix'
     } else {
+      // body … references … appendix
       p.section = appStart >= 0 && i >= appStart ? 'appendix' : i >= refStart ? 'references' : 'body'
     }
   })

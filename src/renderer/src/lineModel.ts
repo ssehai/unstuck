@@ -351,7 +351,13 @@ function toRows(pieces: Piece[]): Box[] {
     const row = rows.find((r) => {
       const h = r.band.bottom - r.band.top
       const gap = Math.max(p.left - r.right, r.left - p.right)
-      return center > r.band.top - h * 0.5 && center < r.band.bottom + h * 0.5 && gap < h * 3
+      // Same row if the centres are close. Narrow pieces (big delimiters,
+      // superscripts, symbols) can sit up to ~1 line off; a wide piece is
+      // a line of text, and the next text line is >= ~1.1 lines away even in
+      // tightly set papers, so wide pieces must be within 0.6 lines.
+      const bandCenter = (r.band.top + r.band.bottom) / 2
+      const narrow = p.right - p.left < h * 6
+      return Math.abs(center - bandCenter) < h * (narrow ? 1.05 : 0.6) && gap < h * 3
     })
     if (row) {
       row.left = Math.min(row.left, p.left)

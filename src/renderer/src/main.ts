@@ -28,7 +28,9 @@ const popup = new SelectionPopup(container, $('sidePanel'))
 
 // --- Side panel: shown by default, toggled with the toolbar button or ⌘\ ---------
 const panelBtn = $<HTMLButtonElement>('panelBtn')
+const panelOpen = (): boolean => !document.body.classList.contains('panel-closed')
 function setPanel(open: boolean): void {
+  if (open === panelOpen()) return
   document.body.classList.toggle('panel-closed', !open)
   panelBtn.setAttribute('aria-pressed', String(open))
   try {
@@ -36,15 +38,68 @@ function setPanel(open: boolean): void {
   } catch {
     /* storage unavailable: fine */
   }
-  // The viewer changed width: let pdf.js refit (overlays follow on their own).
-  window.dispatchEvent(new Event('resize'))
+  // The panel slides in/out (CSS transition); once the viewer has its new
+  // width, let pdf.js refit the pages. Overlays follow on their own.
+  const sidePanel = $('sidePanel')
+  const refit = (): void => {
+    sidePanel.removeEventListener('transitionend', refit)
+    window.dispatchEvent(new Event('resize'))
+  }
+  sidePanel.addEventListener('transitionend', refit)
+  setTimeout(refit, 400) // in case no transition runs
 }
-panelBtn.addEventListener('click', () => setPanel(document.body.classList.contains('panel-closed')))
+panelBtn.addEventListener('click', () => setPanel(!panelOpen()))
 try {
-  if (localStorage.getItem('unstuck.panel') === 'closed') document.body.classList.add('panel-closed')
+  if (localStorage.getItem('unstuck.panel') === 'closed') {
+    document.body.classList.add('panel-closed')
+    panelBtn.setAttribute('aria-pressed', 'false')
+  }
 } catch {
   /* ignore */
 }
+
+// --- Settings: text size of the explanation panel ---------------------------------
+const settingsBtn = $<HTMLButtonElement>('settingsBtn')
+const settingsPanel = $('settingsPanel')
+const FONT_STEPS = [0.85, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.55]
+let fontScale = 1
+function setPanelFont(scale: number): void {
+  fontScale = scale
+  document.documentElement.style.setProperty('--panel-zoom', String(scale))
+  $('fontLabel').textContent = `${Math.round(scale * 100)}%`
+  try {
+    localStorage.setItem('unstuck.panelFont', String(scale))
+  } catch {
+    /* ignore */
+  }
+}
+const stepFont = (dir: 1 | -1): void => {
+  const i = FONT_STEPS.findIndex((v) => v >= fontScale - 1e-6)
+  const next = FONT_STEPS[Math.max(0, Math.min(FONT_STEPS.length - 1, (i < 0 ? FONT_STEPS.length - 1 : i) + dir))]
+  setPanelFont(next)
+}
+$('fontUp').addEventListener('click', () => stepFont(1))
+$('fontDown').addEventListener('click', () => stepFont(-1))
+$('fontReset').addEventListener('click', () => setPanelFont(1))
+try {
+  const saved = Number(localStorage.getItem('unstuck.panelFont'))
+  setPanelFont(saved > 0 ? saved : 1)
+} catch {
+  setPanelFont(1)
+}
+settingsBtn.addEventListener('click', (e) => {
+  e.stopPropagation()
+  if (!settingsPanel.hidden) {
+    settingsPanel.hidden = true
+    return
+  }
+  const r = settingsBtn.getBoundingClientRect()
+  settingsPanel.style.right = `${Math.max(8, innerWidth - r.right)}px`
+  settingsPanel.hidden = false
+})
+document.addEventListener('mousedown', (e) => {
+  if (!settingsPanel.hidden && !settingsPanel.contains(e.target as Node) && e.target !== settingsBtn) settingsPanel.hidden = true
+})
 
 // Selecting a passage asks Claude for an explanation (see explainUi.ts);
 // each explained passage becomes a stuck point that can be reopened.
@@ -64,6 +119,7 @@ const conversationDeps = () => ({
 /** The stuck point currently shown in the panel, if any. */
 let shownRecordId: string | null = null
 popup.onSelect = (sel, body) => {
+  setPanel(true) // asking a question always shows the panel
   cancelExplain?.()
   cancelExplain = evalMode
     ? startEvaluation(sel, body, { reader, container, title: () => fileName.textContent ?? 'paper', store: evalStore })
@@ -87,6 +143,7 @@ popup.onHide = () => {
   shownRecordId = null
 }
 const openStuck = (rec: StuckRecord): void => {
+  setPanel(true)
   shownRecordId = rec.id
   // Go to the passage and show it highlighted, as when it was first selected.
   const locate = async (): Promise<void> => {
@@ -254,6 +311,9 @@ document.addEventListener('mousedown', (e) => {
 })
 
 // --- Opening files: button, ⌘O, drag & drop -------------------------------------
+/** Typing in a text field: keep the platform's own shortcuts there. */
+const isTyping = (e: KeyboardEvent): boolean => !!(e.target as HTMLElement | null)?.closest?.('textarea, input')
+
 const pickFile = (): void => fileInput.click()
 $('openBtn').addEventListener('click', pickFile)
 $('emptyOpenBtn').addEventListener('click', pickFile)
@@ -273,6 +333,9 @@ document.addEventListener('keydown', (e) => {
   } else if ((e.metaKey || e.ctrlKey) && e.shiftKey && key === 'e' && !window.unstuckApi) {
     e.preventDefault() // in Electron the menu handles ⌘⇧E
     setEvalMode(!evalMode)
+  } else if ((e.metaKey || e.ctrlKey) && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !isTyping(e)) {
+    e.preventDefault()
+    setPanel(e.key === 'ArrowRight') // ⌘→ opens the panel on the right, ⌘← closes it
   } else if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
     e.preventDefault()
     panelBtn.click()

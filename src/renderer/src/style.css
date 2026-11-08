@@ -340,12 +340,27 @@ body {
   z-index: 8;
 }
 
+/* The panel slides in from the right; the viewer narrows along with it. */
+#viewerContainer {
+  transition: right 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+#sidePanel {
+  transition:
+    transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1),
+    visibility 0s linear 0s;
+}
+
 body:not(.panel-closed) #viewerContainer {
   right: var(--panel-w);
 }
 
 body.panel-closed #sidePanel {
-  display: none;
+  transform: translateX(100%);
+  visibility: hidden;
+  transition:
+    transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1),
+    visibility 0s linear 0.26s;
 }
 
 .panel-toggle[aria-pressed='true'] {
@@ -1199,4 +1214,53 @@ body.eval-mode .sp-composer {
     opacity: 0;
     transform: translateY(-3px);
   }
+}
+
+/* ---------- Settings ---------- */
+:root {
+  --panel-zoom: 1;
+}
+
+/* Text size of the explanation panel (Settings). */
+.stuck-card,
+.panel-home {
+  zoom: var(--panel-zoom);
+}
+
+.settings-panel {
+  position: fixed;
+  top: calc(var(--toolbar-h) - 4px);
+  width: 300px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  z-index: 30;
+  padding: 6px 10px 12px;
+  font-size: 13px;
+}
+
+.settings-panel[hidden] {
+  display: none;
+}
+
+.set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0 0;
+}
+
+.set-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.set-val {
+  min-width: 42px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
 }
