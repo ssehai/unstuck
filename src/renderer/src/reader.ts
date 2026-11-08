@@ -184,6 +184,28 @@ export class Reader {
   private pinchTarget = 1
   private pinchLast = 0
 
+  /**
+   * Call before the viewer's width changes (e.g. the side panel slides).
+   * Returns a function to call afterwards: if the whole page width was
+   * visible before, the pages are refit to the new width; if the reader had
+   * zoomed in, the zoom is kept and the point at the centre of the view
+   * stays at the centre.
+   */
+  beginResize(): () => void {
+    if (!this.doc) return () => undefined
+    const c = this.container
+    const page = c.querySelector<HTMLElement>('.page')
+    const fitted = this.viewer.currentScaleValue === 'page-width' || (!!page && page.offsetWidth <= c.clientWidth + 2)
+    const centreX = (c.scrollLeft + c.clientWidth / 2) / Math.max(1, c.scrollWidth)
+    return () => {
+      if (fitted) {
+        this.viewer.currentScaleValue = 'page-width'
+      } else {
+        c.scrollLeft = centreX * c.scrollWidth - c.clientWidth / 2
+      }
+    }
+  }
+
   fitWidth(): void {
     this.viewer.currentScaleValue = 'page-width'
   }

@@ -22,8 +22,22 @@
         <button id="zoomIn" class="btn icon" title="Zoom in" disabled>+</button>
         <button id="fitWidth" class="btn" title="Fit to width" disabled>Fit</button>
       </div>
-      <button id="settingsBtn" class="btn icon" title="Settings">⚙︎</button>
-      <button id="panelBtn" class="btn icon panel-toggle" title="Show/hide explanation panel (⌘→ / ⌘←)" aria-pressed="true">▥</button>
+      <button id="settingsBtn" class="icon-btn" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <!-- a gear: teeth drawn as a dashed thick ring -->
+          <circle cx="12" cy="12" r="8.2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-dasharray="3.2 3.24" />
+          <circle cx="12" cy="12" r="6.4" fill="none" stroke="currentColor" stroke-width="1.8" />
+          <circle cx="12" cy="12" r="2.4" fill="none" stroke="currentColor" stroke-width="1.8" />
+        </svg>
+      </button>
+      <button id="panelBtn" class="icon-btn panel-toggle" title="Show/hide explanation panel (⌘← / ⌘→)" aria-label="Explanation panel" aria-pressed="true">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <!-- a window with a sidebar on the right; the sidebar is filled when the panel is open -->
+          <rect class="side-fill" x="15" y="4.5" width="5.5" height="15" rx="1" />
+          <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8" />
+          <line x1="15" y1="4.5" x2="15" y2="19.5" stroke="currentColor" stroke-width="1.8" />
+        </svg>
+      </button>
       <input id="fileInput" type="file" accept="application/pdf,.pdf" hidden />
     </header>
 

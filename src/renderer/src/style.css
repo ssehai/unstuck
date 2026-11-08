@@ -363,10 +363,36 @@ body.panel-closed #sidePanel {
     visibility 0s linear 0.26s;
 }
 
+/* Borderless icon buttons in the toolbar. */
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  background: #f0efeb;
+  color: var(--text);
+}
+
+.panel-toggle .side-fill {
+  fill: transparent;
+  transition: fill 0.2s;
+}
+
 .panel-toggle[aria-pressed='true'] {
-  background: var(--accent-soft);
-  border-color: transparent;
   color: var(--accent);
+}
+
+.panel-toggle[aria-pressed='true'] .side-fill {
+  fill: var(--accent-soft);
 }
 
 .panel-empty {

@@ -31,6 +31,7 @@ const panelBtn = $<HTMLButtonElement>('panelBtn')
 const panelOpen = (): boolean => !document.body.classList.contains('panel-closed')
 function setPanel(open: boolean): void {
   if (open === panelOpen()) return
+  const finishResize = reader.beginResize()
   document.body.classList.toggle('panel-closed', !open)
   panelBtn.setAttribute('aria-pressed', String(open))
   try {
@@ -38,15 +39,26 @@ function setPanel(open: boolean): void {
   } catch {
     /* storage unavailable: fine */
   }
-  // The panel slides in/out (CSS transition); once the viewer has its new
-  // width, let pdf.js refit the pages. Overlays follow on their own.
-  const sidePanel = $('sidePanel')
-  const refit = (): void => {
-    sidePanel.removeEventListener('transitionend', refit)
-    window.dispatchEvent(new Event('resize'))
+  // The panel slides in/out (CSS transition). Once the viewer has its new
+  // width, refit the pages (or keep the zoomed view centred). Overlays follow
+  // on their own.
+  const viewer = $('viewerContainer')
+  let done = false
+  let tries = 0
+  const refit = (e?: TransitionEvent): void => {
+    if (done || (e && e.propertyName !== 'right')) return
+    // Only measure once the slide has really finished.
+    const sliding = viewer.getAnimations().some((a) => a.playState === 'running')
+    if (sliding && tries++ < 30) {
+      setTimeout(() => refit(), 80)
+      return
+    }
+    done = true
+    viewer.removeEventListener('transitionend', refit)
+    finishResize()
   }
-  sidePanel.addEventListener('transitionend', refit)
-  setTimeout(refit, 400) // in case no transition runs
+  viewer.addEventListener('transitionend', refit)
+  setTimeout(() => refit(), 450) // in case no transitionend arrives
 }
 panelBtn.addEventListener('click', () => setPanel(!panelOpen()))
 try {
@@ -98,7 +110,7 @@ settingsBtn.addEventListener('click', (e) => {
   settingsPanel.hidden = false
 })
 document.addEventListener('mousedown', (e) => {
-  if (!settingsPanel.hidden && !settingsPanel.contains(e.target as Node) && e.target !== settingsBtn) settingsPanel.hidden = true
+  if (!settingsPanel.hidden && !settingsPanel.contains(e.target as Node) && !settingsBtn.contains(e.target as Node)) settingsPanel.hidden = true
 })
 
 // Selecting a passage asks Claude for an explanation (see explainUi.ts);
@@ -335,7 +347,7 @@ document.addEventListener('keydown', (e) => {
     setEvalMode(!evalMode)
   } else if ((e.metaKey || e.ctrlKey) && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !isTyping(e)) {
     e.preventDefault()
-    setPanel(e.key === 'ArrowRight') // ⌘→ opens the panel on the right, ⌘← closes it
+    setPanel(e.key === 'ArrowLeft') // ⌘← pulls the panel in, ⌘→ pushes it away
   } else if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
     e.preventDefault()
     panelBtn.click()
