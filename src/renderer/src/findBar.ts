@@ -30,9 +30,15 @@ export class FindBar {
       </svg>
       <input type="text" spellcheck="false" />
       <span class="fb-count"></span>
-      <button class="fb-btn" data-dir="prev" title="Previous (⇧Enter)">⌃</button>
-      <button class="fb-btn" data-dir="next" title="Next (Enter)">⌄</button>
-      <button class="fb-btn fb-close" title="Close (Esc)">×</button>`
+      <button class="fb-btn" data-dir="prev" title="Previous (⇧Enter)" aria-label="Previous">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><polyline points="6 15 12 9 18 15" /></svg>
+      </button>
+      <button class="fb-btn" data-dir="next" title="Next (Enter)" aria-label="Next">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+      </button>
+      <button class="fb-btn fb-close" title="Close (Esc)" aria-label="Close">
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
+      </button>`
     host.appendChild(this.el)
     this.input = this.el.querySelector('input')!
     this.input.placeholder = opts.placeholder

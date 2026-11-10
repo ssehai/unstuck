@@ -33,6 +33,8 @@ export class Reader {
   private readonly finder: InstanceType<typeof PDFFindController>
   /** Called with match counts while searching (⌘F). */
   onFindCount?: (current: number, total: number) => void
+  /** Called after pdf.js updated the search-match marks in a text layer. */
+  onFindMatches?: () => void
   private readonly events: ReaderEvents
   private doc: PDFDocumentProxy | null = null
   private pendingView: ReaderView | null = null
@@ -66,6 +68,7 @@ export class Reader {
     }
     this.eventBus.on('updatefindmatchescount', reportCount)
     this.eventBus.on('updatefindcontrolstate', reportCount)
+    this.eventBus.on('updatetextlayermatches', () => this.onFindMatches?.())
     this.eventBus.on('textlayerrendered', (e: { pageNumber: number }) => {
       events.onTextLayer?.(e.pageNumber)
     })

@@ -1364,15 +1364,25 @@ body.eval-mode .sp-composer {
 }
 
 .fb-btn {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
   border: none;
   background: none;
   width: 26px;
   height: 26px;
+  padding: 0;
   border-radius: 6px;
-  font-size: 15px;
-  line-height: 1;
   color: var(--muted);
   cursor: pointer;
+}
+
+.fb-btn svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .fb-btn:hover {
@@ -1390,9 +1400,22 @@ body.eval-mode .sp-composer {
   color: #000;
 }
 
-/* PDF matches (pdf.js text layer): our own colours. pdf_viewer.css loads
-   after this file, so the selector needs to be more specific. */
+/* PDF matches: pdf.js's own marks (drawn in the fallback-font text layer)
+   are hidden; main.ts redraws them aligned with the glyphs. pdf_viewer.css
+   loads after this file, so the selector needs to be more specific. */
 .pdfViewer .textLayer .highlight {
-  --highlight-bg-color: rgba(255, 196, 0, 0.45);
-  --highlight-selected-bg-color: rgba(245, 120, 0, 0.6);
+  --highlight-bg-color: transparent;
+  --highlight-selected-bg-color: transparent;
+}
+
+.find-hl {
+  position: absolute;
+  background: rgba(255, 196, 0, 0.45);
+  border-radius: 2px;
+  mix-blend-mode: multiply;
+}
+
+.find-hl.current {
+  background: rgba(245, 130, 0, 0.6);
+  box-shadow: 0 0 0 1.5px rgba(245, 130, 0, 0.9);
 }

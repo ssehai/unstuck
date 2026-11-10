@@ -79,10 +79,14 @@ export function getLines(page: HTMLElement): Line[] {
 function buildLines(layer: Element, canvas: HTMLCanvasElement, cRect: DOMRect): Line[] {
   // 1) Text spans with page-local boxes, in reading (DOM) order.
   const spans: SpanInfo[] = []
-  // Text runs are the spans pdf.js creates per glyph run. While searching
-  // (⌘F), pdf.js wraps matches in nested <span class="highlight">, which
-  // splits a run into several text nodes; those stay part of their run.
-  for (const span of layer.querySelectorAll<HTMLElement>('span:not(.highlight):not(.markedContent)')) {
+  // Text runs are the spans pdf.js creates per glyph run (direct children of
+  // the layer or of a markedContent group). While searching (⌘F), pdf.js
+  // wraps matches in nested <span class="highlight">, which splits a run into
+  // several text nodes; those stay part of their run.
+  const runs = Array.from(layer.querySelectorAll<HTMLElement>('span')).filter(
+    (s) => !s.classList.contains('markedContent') && (s.parentElement === layer || !!s.parentElement?.classList.contains('markedContent'))
+  )
+  for (const span of runs) {
     const r = span.getBoundingClientRect()
     if (r.width === 0 || r.height === 0) continue
     const texts: Text[] = []

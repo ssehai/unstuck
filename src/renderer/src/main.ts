@@ -3,6 +3,8 @@ import { startConversation } from './explainUi'
 import { getEvalStore, startEvaluation } from './evaluation'
 import { FindBar } from './findBar'
 import { PanelFind } from './panelFind'
+import { selectionBoxes } from './lineModel'
+import { clearOverlays, pageOverlay, placeBox, toPageBoxes } from './overlay'
 import { jumpTo } from './locate'
 import { getNotesStore, type StuckRecord } from './notes'
 import { StuckPoints } from './stuckPoints'
@@ -132,8 +134,43 @@ const pdfFind = new FindBar($('stage'), {
   placeholder: '논문에서 찾기',
   className: 'find-pdf',
   onSearch: (q, dir) => (q ? reader.find(q, dir) : reader.clearFind()),
-  onClose: () => reader.clearFind()
+  onClose: () => {
+    reader.clearFind()
+    clearOverlays(container, 'find')
+  }
 })
+
+/**
+ * pdf.js marks matches in its invisible text layer, whose glyph positions come
+ * from a fallback font, so its own marks drift off the real letters. Its marks
+ * are hidden (CSS) and redrawn here with the ink-aligned geometry used for
+ * selections, in percent of the page so they follow zooming.
+ */
+let findFrame = 0
+function drawFindMarks(): void {
+  cancelAnimationFrame(findFrame)
+  findFrame = requestAnimationFrame(() => {
+    clearOverlays(container, 'find')
+    if (!pdfFind.isOpen) return
+    for (const el of container.querySelectorAll<HTMLElement>('.textLayer .highlight')) {
+      const texts: Text[] = []
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) texts.push(n as Text)
+      if (texts.length === 0) continue
+      const range = document.createRange()
+      range.setStart(texts[0], 0)
+      range.setEnd(texts[texts.length - 1], texts[texts.length - 1].length)
+      for (const b of toPageBoxes(selectionBoxes(range, container), container)) {
+        const overlay = pageOverlay(container, b.page, 'find')
+        if (!overlay) continue
+        const d = document.createElement('div')
+        d.className = 'find-hl' + (el.classList.contains('selected') ? ' current' : '')
+        placeBox(d, b, 1)
+        overlay.appendChild(d)
+      }
+    }
+  })
+}
 const panelFind = new PanelFind(sidePanel)
 let lastFind: 'pdf' | 'panel' = 'pdf'
 function openPdfFind(): void {
@@ -273,9 +310,11 @@ const reader = new Reader(container, $<HTMLDivElement>('viewer'), {
   onTextLayer: () => {
     popup.refreshHighlight()
     stuck.renderMarkers()
+    if (pdfFind.isOpen) drawFindMarks()
   }
 })
 reader.onFindCount = (current, total) => pdfFind.setCount(current, total)
+reader.onFindMatches = drawFindMarks
 
 // --- Remember where the reader is in each paper ---------------------------------
 let saveTimer = 0
