@@ -80,7 +80,7 @@ Details are in the technical report.
 ## Installation
 
 ```bash
-git clone https://github.com/<your-id>/unstuck.git
+git clone https://github.com/ssehai/unstuck.git
 cd unstuck
 npm install
 ```
