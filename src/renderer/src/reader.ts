@@ -7,7 +7,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
 // pdf_viewer.mjs reads the core library from globalThis, so it must be set
 // before the viewer module is evaluated (hence the dynamic import below).
 ;(globalThis as unknown as { pdfjsLib: typeof pdfjsLib }).pdfjsLib = pdfjsLib
-const { EventBus, PDFViewer, PDFLinkService } = await import('pdfjs-dist/web/pdf_viewer.mjs')
+const { EventBus, PDFViewer, PDFLinkService, PDFFindController } = await import('pdfjs-dist/web/pdf_viewer.mjs')
 
 const MIN_SCALE = 0.25
 const MAX_SCALE = 5
@@ -30,6 +30,9 @@ export class Reader {
   private readonly eventBus = new EventBus()
   private readonly linkService = new PDFLinkService({ eventBus: this.eventBus })
   private readonly viewer: InstanceType<typeof PDFViewer>
+  private readonly finder: InstanceType<typeof PDFFindController>
+  /** Called with match counts while searching (⌘F). */
+  onFindCount?: (current: number, total: number) => void
   private readonly events: ReaderEvents
   private doc: PDFDocumentProxy | null = null
   private pendingView: ReaderView | null = null
@@ -37,7 +40,9 @@ export class Reader {
   constructor(container: HTMLDivElement, viewerEl: HTMLDivElement, events: ReaderEvents = {}) {
     this.container = container
     this.events = events
+    this.finder = new PDFFindController({ linkService: this.linkService, eventBus: this.eventBus })
     this.viewer = new PDFViewer({
+      findController: this.finder,
       container,
       viewer: viewerEl,
       eventBus: this.eventBus,
@@ -56,6 +61,11 @@ export class Reader {
     this.eventBus.on('pagechanging', (e: { pageNumber: number }) => {
       events.onPageChange?.(e.pageNumber, this.doc?.numPages ?? 0)
     })
+    const reportCount = (e: { matchesCount?: { current: number; total: number } }): void => {
+      if (e.matchesCount) this.onFindCount?.(e.matchesCount.current, e.matchesCount.total)
+    }
+    this.eventBus.on('updatefindmatchescount', reportCount)
+    this.eventBus.on('updatefindcontrolstate', reportCount)
     this.eventBus.on('textlayerrendered', (e: { pageNumber: number }) => {
       events.onTextLayer?.(e.pageNumber)
     })
@@ -110,6 +120,7 @@ export class Reader {
     this.pendingView = view ?? null
     this.viewer.setDocument(doc)
     this.linkService.setDocument(doc)
+    this.finder.setDocument(doc)
     this.events.onDocumentLoaded?.(doc)
     this.events.onPageChange?.(1, doc.numPages)
     return doc
@@ -141,6 +152,26 @@ export class Reader {
     // Shift the page so the region's corner lands at the canvas origin.
     await page.render({ canvasContext: ctx, viewport, transform: [1, 0, 0, 1, -sx, -sy] }).promise
     return { dataUrl: canvas.toDataURL('image/png'), width, height }
+  }
+
+  /** Search the whole PDF (pdf.js highlights matches in the text layer). */
+  find(query: string, direction: 'new' | 'next' | 'prev'): void {
+    if (!this.doc) return
+    this.eventBus.dispatch('find', {
+      source: this,
+      type: direction === 'new' ? '' : 'again',
+      query,
+      caseSensitive: false,
+      entireWord: false,
+      highlightAll: true,
+      findPrevious: direction === 'prev',
+      matchDiacritics: false
+    })
+  }
+
+  /** Removes search highlights. */
+  clearFind(): void {
+    this.eventBus.dispatch('findbarclose', { source: this })
   }
 
   get scale(): number {

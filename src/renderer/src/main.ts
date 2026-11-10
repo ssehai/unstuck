@@ -1,6 +1,8 @@
 import './style.css'
 import { startConversation } from './explainUi'
 import { getEvalStore, startEvaluation } from './evaluation'
+import { FindBar } from './findBar'
+import { PanelFind } from './panelFind'
 import { jumpTo } from './locate'
 import { getNotesStore, type StuckRecord } from './notes'
 import { StuckPoints } from './stuckPoints'
@@ -43,6 +45,7 @@ function layoutPanel(): void {
   sidePanel.style.transform = `translateX(${panelW - panelShown}px)`
   sidePanel.style.visibility = panelShown > 0 ? 'visible' : 'hidden'
   container.style.right = `${panelShown}px`
+  document.documentElement.style.setProperty('--panel-shown', `${panelShown}px`)
 }
 
 let slideFrame = 0
@@ -123,6 +126,33 @@ addEventListener('resize', () => {
   panelW = w
   layoutPanel()
 })
+
+// --- Find: ⌘F in the PDF, ⌘⇧F in the side panel ------------------------------------
+const pdfFind = new FindBar($('stage'), {
+  placeholder: '논문에서 찾기',
+  className: 'find-pdf',
+  onSearch: (q, dir) => (q ? reader.find(q, dir) : reader.clearFind()),
+  onClose: () => reader.clearFind()
+})
+const panelFind = new PanelFind(sidePanel)
+let lastFind: 'pdf' | 'panel' = 'pdf'
+function openPdfFind(): void {
+  if (!reader.isOpen) return
+  lastFind = 'pdf'
+  // Start from words just selected (not asked about yet), like macOS ⌘E/⌘F.
+  const sel = popup.pendingText
+  pdfFind.open(sel && sel.length < 80 ? sel : undefined)
+}
+function openPanelFind(): void {
+  setPanel(true)
+  lastFind = 'panel'
+  panelFind.open()
+}
+function findStep(dir: 'next' | 'prev'): void {
+  if (lastFind === 'panel' && panelFind.bar.isOpen) panelFind.bar.step(dir)
+  else if (pdfFind.isOpen) pdfFind.step(dir)
+  else openPdfFind()
+}
 
 // --- Panel text size (View menu, ⌘⇧+ / ⌘⇧−) ----------------------------------------
 const FONT_STEPS = [0.85, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.55]
@@ -245,6 +275,7 @@ const reader = new Reader(container, $<HTMLDivElement>('viewer'), {
     stuck.renderMarkers()
   }
 })
+reader.onFindCount = (current, total) => pdfFind.setCount(current, total)
 
 // --- Remember where the reader is in each paper ---------------------------------
 let saveTimer = 0
@@ -460,6 +491,10 @@ function zoomCommand(cmd: 'in' | 'out' | 'fit'): void {
 window.unstuckApi?.onMenu?.((cmd) => {
   if (cmd === 'toggle-eval') setEvalMode(!evalMode)
   else if (cmd === 'preferences') openPreferences()
+  else if (cmd === 'find-paper') openPdfFind()
+  else if (cmd === 'find-panel') openPanelFind()
+  else if (cmd === 'find-next') findStep('next')
+  else if (cmd === 'find-prev') findStep('prev')
   else if (cmd === 'panel-font-up') stepFont(1)
   else if (cmd === 'panel-font-down') stepFont(-1)
   else if (cmd === 'panel-font-reset') setPanelFont(1)
@@ -477,6 +512,14 @@ document.addEventListener('keydown', (e) => {
   if (!window.unstuckApi && e.key === ',') {
     e.preventDefault()
     return openPreferences()
+  }
+  if (!window.unstuckApi && (e.key === 'f' || e.key === 'F')) {
+    e.preventDefault()
+    return e.shiftKey ? openPanelFind() : openPdfFind()
+  }
+  if (!window.unstuckApi && (e.key === 'g' || e.key === 'G')) {
+    e.preventDefault()
+    return findStep(e.shiftKey ? 'prev' : 'next')
   }
   if (e.shiftKey) {
     if (window.unstuckApi) return

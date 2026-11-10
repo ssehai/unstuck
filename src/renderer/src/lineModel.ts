@@ -56,9 +56,17 @@ export function getLines(page: HTMLElement): Line[] {
   const canvas = pageCanvas(page)
   if (!layer || !canvas) return []
   const cRect = canvas.getBoundingClientRect()
-  const key = `${canvas.width}x${canvas.height}|${cRect.width.toFixed(1)}|${layer.childElementCount}`
+  // Search highlights (⌘F) split text nodes into extra spans, so the span
+  // count is part of the key.
+  const key = `${canvas.width}x${canvas.height}|${cRect.width.toFixed(1)}|${layer.querySelectorAll('span').length}`
   const hit = cache.get(layer)
-  if (hit && hit.key === key && hit.canvas === canvas) return hit.lines
+  const fresh = (lines: Line[]): boolean => {
+    // pdf.js may replace the text nodes (e.g. when search highlights are
+    // removed); cached carets would then point at detached nodes.
+    const words = lines.flatMap((l) => (l.words.length ? [l.words[0], l.words[l.words.length - 1]] : []))
+    return words.every((w) => w.from.node.isConnected && w.to.node.isConnected)
+  }
+  if (hit && hit.key === key && hit.canvas === canvas && fresh(hit.lines)) return hit.lines
 
   const lines = buildLines(layer, canvas, cRect)
   // Right after a zoom the canvas may still be blank (re-rendering). Then no
@@ -71,18 +79,29 @@ export function getLines(page: HTMLElement): Line[] {
 function buildLines(layer: Element, canvas: HTMLCanvasElement, cRect: DOMRect): Line[] {
   // 1) Text spans with page-local boxes, in reading (DOM) order.
   const spans: SpanInfo[] = []
-  for (const span of layer.querySelectorAll<HTMLElement>('span')) {
-    const node = span.firstChild
-    if (!(node instanceof Text) || !node.data.trim()) continue
+  // Text runs are the spans pdf.js creates per glyph run. While searching
+  // (⌘F), pdf.js wraps matches in nested <span class="highlight">, which
+  // splits a run into several text nodes; those stay part of their run.
+  for (const span of layer.querySelectorAll<HTMLElement>('span:not(.highlight):not(.markedContent)')) {
     const r = span.getBoundingClientRect()
     if (r.width === 0 || r.height === 0) continue
-    spans.push({
-      node,
-      left: r.left - cRect.left,
-      right: r.right - cRect.left,
-      top: r.top - cRect.top,
-      bottom: r.bottom - cRect.top
-    })
+    const texts: Text[] = []
+    const walker = document.createTreeWalker(span, NodeFilter.SHOW_TEXT)
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) texts.push(n as Text)
+    if (!texts.some((t) => t.data.trim())) continue
+    const top = r.top - cRect.top
+    const bottom = r.bottom - cRect.top
+    if (texts.length === 1) {
+      spans.push({ node: texts[0], left: r.left - cRect.left, right: r.right - cRect.left, top, bottom })
+      continue
+    }
+    for (const t of texts) {
+      if (!t.data) continue
+      const sub = document.createRange()
+      sub.selectNodeContents(t)
+      const tr = sub.getBoundingClientRect()
+      spans.push({ node: t, left: tr.left - cRect.left, right: tr.right - cRect.left, top, bottom })
+    }
   }
 
   // 2) Group consecutive spans that sit on the same visual line.

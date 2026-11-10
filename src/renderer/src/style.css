@@ -1305,3 +1305,94 @@ body.eval-mode .sp-composer {
   color: var(--muted);
   cursor: pointer;
 }
+
+/* ---------- Find bars (⌘F / ⌘⇧F) ---------- */
+.find-bar {
+  position: absolute;
+  top: 10px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px 5px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  font-size: 13px;
+}
+
+.find-bar[hidden] {
+  display: none;
+}
+
+.find-pdf {
+  right: calc(var(--panel-shown, 0px) + 22px);
+}
+
+.find-panel {
+  left: 12px;
+  right: 12px;
+}
+
+.fb-icon {
+  color: var(--muted);
+  flex: none;
+}
+
+.find-bar input {
+  flex: 1;
+  min-width: 0;
+  width: 200px;
+  border: none;
+  outline: none;
+  font: inherit;
+  background: none;
+  padding: 3px 4px;
+}
+
+.fb-count {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding: 0 4px;
+}
+
+.find-bar.no-match .fb-count {
+  color: #b3261e;
+}
+
+.fb-btn {
+  border: none;
+  background: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.fb-btn:hover {
+  background: #f0efeb;
+  color: var(--text);
+}
+
+/* Panel matches (CSS Custom Highlight API). */
+::highlight(unstuck-find) {
+  background-color: rgba(255, 196, 0, 0.45);
+}
+
+::highlight(unstuck-find-current) {
+  background-color: #f5a623;
+  color: #000;
+}
+
+/* PDF matches (pdf.js text layer): our own colours. pdf_viewer.css loads
+   after this file, so the selector needs to be more specific. */
+.pdfViewer .textLayer .highlight {
+  --highlight-bg-color: rgba(255, 196, 0, 0.45);
+  --highlight-selected-bg-color: rgba(245, 120, 0, 0.6);
+}

@@ -73,6 +73,11 @@ export class SelectionPopup {
     return this.current
   }
 
+  /** Text of a selection that has not been asked about yet, if any. */
+  get pendingText(): string | null {
+    return this.pending?.sel.text ?? null
+  }
+
   get cardOpen(): boolean {
     return !this.card.hidden
   }
