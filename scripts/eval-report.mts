@@ -1,13 +1,18 @@
 /**
  * Summarises the blind A/B evaluation (evaluation mode) for the report.
  *
- *   node --no-warnings scripts/eval-report.mts [results.jsonl] [--csv out.csv]
+ *   node --no-warnings scripts/eval-report.mts [results.jsonl] [--csv out.csv] [--paper paper.pdf]
+ *
+ * --paper re-checks the tool's evidence quotes against that PDF with the
+ * current checker (for records about a paper with the same file name).
  *
  * Default input: ~/Library/Application Support/unstuck/evaluation/results.jsonl
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
+import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
+import { checkQuote, paperParagraphs } from '../src/renderer/src/paperText.ts'
 
 type Arm = 'tool' | 'baseline'
 interface Rec {
@@ -31,7 +36,9 @@ interface Rec {
 const args = process.argv.slice(2)
 const csvAt = args.indexOf('--csv')
 const csvOut = csvAt >= 0 ? args[csvAt + 1] : null
-const input = args.find((a, i) => !a.startsWith('--') && i !== csvAt + 1) ??
+const paperAt = args.indexOf('--paper')
+const paperPdf = paperAt >= 0 ? args[paperAt + 1] : null
+const input = args.find((a, i) => !a.startsWith('--') && i !== csvAt + 1 && i !== paperAt + 1) ??
   join(homedir(), 'Library/Application Support/unstuck/evaluation/results.jsonl')
 
 if (!existsSync(input)) {
@@ -40,6 +47,19 @@ if (!existsSync(input)) {
 }
 const recs: Rec[] = readFileSync(input, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
 const n = recs.length
+
+// Optionally re-check the tool's evidence quotes with the current checker.
+let rechecked = 0
+if (paperPdf) {
+  const doc = await getDocument({ data: new Uint8Array(readFileSync(paperPdf)), verbosity: 0 }).promise
+  const paras = await paperParagraphs(doc as never)
+  for (const r of recs.filter((r) => r.paper === basename(paperPdf))) {
+    const quotes = [...r.answers.tool.matchAll(/^\s*[-*]\s*\[p\.\s?(\d+)(?:\s*¶\s?\d+)?\]\s*["“](.+?)["”]?\s*$/gm)]
+    const verified = quotes.filter((m) => checkQuote(paras, m[2], Number(m[1])).found).length
+    if (verified !== r.citations.verified || quotes.length !== r.citations.total) rechecked++
+    r.citations = { total: quotes.length, verified }
+  }
+}
 const pct = (a: number, b: number): string => (b ? `${Math.round((a / b) * 100)}%` : '–')
 const count = (f: (r: Rec) => boolean, rs = recs): number => rs.filter(f).length
 const median = (xs: number[]): number => {
@@ -80,7 +100,7 @@ const fmtReasons = (m: Map<string, number>): string =>
 
 console.log(`# Blind A/B evaluation — ${n} passages
 Source: ${input}
-Papers: ${[...new Set(recs.map((r) => r.paper))].join(', ')}
+Papers: ${[...new Set(recs.map((r) => r.paper))].join(', ')}${paperPdf ? `\nEvidence re-checked against ${basename(paperPdf)} (${rechecked} record(s) changed)` : ''}
 
 ## Which answer made the passage clearer?
 | Subset | n | Unstuck | Baseline | Similar |

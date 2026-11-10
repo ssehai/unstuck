@@ -46,7 +46,7 @@ async function extract(doc: PDFDocumentProxy): Promise<Paragraph[]> {
       if (!('str' in it)) continue
       const [a, b, , , x, y] = it.transform as number[]
       if (Math.abs(b) > Math.abs(a) * 0.1) continue // rotated text, e.g. the arXiv side stamp
-      items.push({ str: it.str, x, y, h: it.height || Math.abs(a), eol: it.hasEOL })
+      items.push({ str: markLostGlyphs(it.str), x, y, h: it.height || Math.abs(a), eol: it.hasEOL })
     }
     out.push(...toParagraphs(n, items))
   }
@@ -199,6 +199,26 @@ export function normalizeForMatch(s: string): string {
     .replace(/[\s\-‐‑–—'"“”‘’`´]/g, '')
 }
 
+/**
+ * Some PDFs map math glyphs (ε, φ, …) to control characters in their text
+ * (a broken font ToUnicode table): "For small \u000f, agents…". Those are
+ * shown to the model as "□" so it knows a symbol is missing there.
+ */
+export const LOST_GLYPH = '□'
+export function markLostGlyphs(s: string): string {
+  return s.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, LOST_GLYPH)
+}
+
+/**
+ * A looser key for matching quotes: ASCII letters and digits only. Quotes that
+ * differ from the paper only in symbols (ε vs □ vs nothing, quotes, dashes,
+ * math signs) still match. Used only as a fallback, on long enough quotes.
+ */
+export function looseKey(s: string): string {
+  return s.normalize('NFKC').toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+const LOOSE_MIN = 16
+
 export interface CitationCheck {
   found: boolean
   /** Page where the quote was actually found (may differ from the cited one). */
@@ -208,15 +228,19 @@ export interface CitationCheck {
 
 /** Does the quoted text really appear in the paper? Prefers the cited page. */
 export function checkQuote(paras: Paragraph[], quote: string, citedPage?: number): CitationCheck {
-  const q = normalizeForMatch(quote)
-  if (q.length < 8) return { found: false }
   const ordered = citedPage ? [...paras].sort((a, b) => Number(b.page === citedPage) - Number(a.page === citedPage)) : paras
-  for (const p of ordered) {
-    if (normalizeForMatch(p.text).includes(q)) return { found: true, page: p.page, paragraph: p.index }
+  const search = (key: (s: string) => string, minLen: number): CitationCheck | null => {
+    const q = key(quote)
+    if (q.length < minLen) return null
+    for (const p of ordered) {
+      if (key(p.text).includes(q)) return { found: true, page: p.page, paragraph: p.index }
+    }
+    // Quotes can straddle a paragraph break: try page-level text.
+    const pages = new Map<number, string>()
+    for (const p of paras) pages.set(p.page, (pages.get(p.page) ?? '') + key(p.text))
+    for (const [page, t] of pages) if (t.includes(q)) return { found: true, page }
+    return null
   }
-  // Quotes can straddle a paragraph break: try page-level text.
-  const pages = new Map<number, string>()
-  for (const p of paras) pages.set(p.page, (pages.get(p.page) ?? '') + normalizeForMatch(p.text))
-  for (const [page, t] of pages) if (t.includes(q)) return { found: true, page }
-  return { found: false }
+  // Exact (modulo spaces/quotes/dashes) first; then ignoring symbols.
+  return search(normalizeForMatch, 8) ?? search(looseKey, LOOSE_MIN) ?? { found: false }
 }

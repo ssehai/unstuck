@@ -26,6 +26,7 @@ Rules:
 - Ground the explanation in this paper. If something is general background not stated in the paper, say so.
 - Write math in LaTeX: $...$ inline, $$...$$ for display.
 - If an image is attached, it shows the rendered region around the selection. Read equations from the image; the extracted text of math is garbled.
+- In the PAPER TEXT, □ marks a math symbol (often a Greek letter) that the PDF's text lost. Infer it from context or the image. When quoting a sentence containing □, copy it as is.
 
 PAPER TEXT — "${title}" (paragraphs labelled [p.page ¶paragraph]):
 ${paper}`

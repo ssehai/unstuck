@@ -4,7 +4,7 @@
  * and flash a highlight over the quote.
  */
 import { getLines, pageCanvas, selectionBoxes, type Box } from './lineModel'
-import { normalizeForMatch } from './paperText'
+import { looseKey, normalizeForMatch } from './paperText'
 import type { Reader } from './reader'
 
 /** How much of the view the quoted lines may take up. */
@@ -13,19 +13,26 @@ const FILL_HEIGHT = 0.55
 /** Never zoom past this when jumping (a short quote shouldn't blow up). */
 const MAX_JUMP_SCALE = 3
 
-/** Finds `quote` in a page's text layer and returns it as a DOM range. */
+/**
+ * Finds `quote` in a page's text layer and returns it as a DOM range.
+ * Tries an exact match (ignoring spaces, quotes, dashes) first, then one that
+ * ignores all symbols (for math glyphs the PDF text lost).
+ */
 export function findInPage(page: HTMLElement, quote: string): Range | null {
-  const q = normalizeForMatch(quote)
-  if (!q) return null
-  // Normalized page text, with a map from each normalized char to (node, offset).
+  return findWith(page, quote, normalizeForMatch, 1) ?? findWith(page, quote, looseKey, 16)
+}
+
+function findWith(page: HTMLElement, quote: string, key: (s: string) => string, minLen: number): Range | null {
+  const q = key(quote)
+  if (q.length < minLen) return null
+  // Keyed page text, with a map from each keyed char back to (node, offset).
   const map: { node: Text; offset: number }[] = []
   let norm = ''
   const walker = document.createTreeWalker(page.querySelector('.textLayer') ?? page, NodeFilter.SHOW_TEXT)
   for (let n = walker.nextNode(); n; n = walker.nextNode()) {
     const node = n as Text
     for (let i = 0; i < node.data.length; i++) {
-      const c = normalizeForMatch(node.data[i])
-      for (const ch of c) {
+      for (const ch of key(node.data[i])) {
         norm += ch
         map.push({ node, offset: i })
       }
