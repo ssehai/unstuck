@@ -226,7 +226,7 @@ export function startEvaluation(sel: StuckSelection, body: HTMLElement, deps: Ev
       },
       { once: true }
     )
-    body.scrollTop = form.offsetTop - 20
+    // The form appears below the answers; the view stays where the reader is.
   }
 
   // --- Step 2: reveal + citation check, then save ------------------------------------

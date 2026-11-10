@@ -96,11 +96,12 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
     deps.onRecord(record)
   }
 
-  const addQuestion = (label: string): void => {
+  const addQuestion = (label: string): HTMLElement => {
     const bubble = document.createElement('div')
     bubble.className = 'sp-question'
     bubble.textContent = label
     thread.appendChild(bubble)
+    return bubble
   }
 
   const addAnswer = (markdown: string): HTMLElement => {
@@ -170,10 +171,12 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
       if (record.note) showNote(record.note, true)
       await save()
     }
-    addQuestion(label)
+    const bubble = addQuestion(label)
     const block = thinking('Thinking…')
     thread.appendChild(block)
-    scrollTo(block)
+    // Show the question just asked once; after that the answer streams in
+    // below without moving the view, so it can be read at one's own pace.
+    scrollTo(bubble)
     const reply = await stream1(block, text)
     if (reply !== null && record) {
       record.turns.push({ role: 'user', display: label, text }, { role: 'assistant', display: reply, text: reply })
@@ -221,8 +224,7 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
       record.status = 'understood'
       syncGotIt()
       await save()
-      showNote(note)
-      scrollTo(noteSlot)
+      showNote(note) // in place; the view is not moved
     }
     if (!cancelled) setBusy(false)
   }
