@@ -80,6 +80,8 @@ function signTest(wins: number, losses: number): number {
   return Math.min(1, 2 * p)
 }
 
+const fmtP = (p: number): string => (p >= 0.001 ? p.toFixed(3) : p.toExponential(1))
+
 function prefTable(title: string, rs: Rec[]): string {
   const t = count((r) => r.preferred === 'tool', rs)
   const b = count((r) => r.preferred === 'baseline', rs)
@@ -109,7 +111,7 @@ ${prefTable('All', recs)}
 ${prefTable('With math', recs.filter((r) => r.hasMath))}
 ${prefTable('Text only', recs.filter((r) => !r.hasMath))}
 
-Exact sign test (ties excluded): Unstuck ${tool} vs baseline ${base}, two-sided p = ${signTest(tool, base).toFixed(3)}
+Exact sign test (ties excluded): Unstuck ${tool} vs baseline ${base}, two-sided p = ${fmtP(signTest(tool, base))}
 (n is small and self-rated; treat as descriptive.)
 
 ## Why
