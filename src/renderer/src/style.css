@@ -1494,3 +1494,10 @@ body.eval-mode .sp-composer {
   color: var(--accent);
   font-weight: 700;
 }
+
+/* Several images sent with one question: stacked, a thin rule between them. */
+.sp-capture.many img + img {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}

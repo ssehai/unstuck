@@ -1,24 +1,29 @@
 /**
- * Figures of a paper, found once when the paper is first opened and saved in
- * the library with their captions, so a figure can be clicked and asked about
- * like a text selection.
+ * Figures and tables of a paper, found once when the paper is first opened
+ * and saved in the library with their captions, so one can be clicked and
+ * asked about like a text selection.
  *
- * Papers draw most figures as vector graphics (plots), not embedded images,
- * so figures are found from their captions instead:
+ * Papers draw most figures as vector graphics (hundreds of lines and glyphs,
+ * with nothing marking "this is Figure 3"), so a figure is found from what is
+ * drawn rather than from an embedded image:
  *
- *  1. A caption is a text line that starts with "Figure N:" / "Fig. N." (a
- *     colon or period right after the number; "Figure 3 shows…" in running
- *     text does not match), plus the lines of the same block below it.
- *  2. The figure sits above its caption, in the caption's column (or across
- *     the page for a wide caption), up to the nearest line of body text, i.e.
- *     a line that fills most of the column. Labels inside plots are short.
- *  3. The region is then trimmed to the ink actually drawn there; a region
- *     with no ink is not a figure.
+ *  1. Ink: the page is rendered once at low resolution and every text line
+ *     set at body size or larger (paragraphs, headings, captions, "(a) SMAC"
+ *     sub-figure labels) is erased. What is left is graphics plus the small
+ *     text inside plots, grouped into blobs of nearby ink.
+ *  2. Captions: lines that start with "Figure 3:", "Fig. 3.", "Table 2 |",
+ *     "FIGURE S1 —", "그림 3." … (the label, then a separator).
+ *  3. Pairing: each caption claims the blobs next to it. Figures look above
+ *     the caption first, tables below; failing that the other way, then the
+ *     side (a caption beside its figure). Blobs keep being claimed outwards,
+ *     row after row of sub-plots, until a paragraph line or another caption
+ *     is in the way.
+ *  4. The figure's region is the box around its claimed blobs.
  */
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 
 export interface PaperFigure {
-  /** "Figure 3" */
+  /** "Figure 3", "Table 2" */
   label: string
   page: number
   /** Region as fractions (0–1) of the page, like CaptureRegion. */
@@ -31,14 +36,37 @@ export interface PaperFigure {
 }
 
 /** Bump when detection changes, so saved figures are found again. */
-export const FIGURES_VERSION = 4
+export const FIGURES_VERSION = 7
 
-/** Points from the page top where content can start (page headers sit above). */
-const TOP_MARGIN = 24
-/** Points from the left/right page edges searched for a figure's ink. */
-const EDGE = 10
+/**
+ * A caption's first line: a kind, a number ("3", "S1", "A.2", "3a", "IV"),
+ * then a separator, or nothing more on the line (the text continues below).
+ * In running text these words don't start a line followed by a separator.
+ */
+const CAPTION =
+  /^\s*(Figure|FIGURE|Fig\.?|FIG\.?|Table|TABLE|Tab\.|그림|표)\s*((?:[A-Z]\.?|S)?\d+(?:\.\d+)*[a-z]?|[IVX]{1,5})\s*(?:[:.|—–-]\s*|$)/
 
-const CAPTION = /^\s*(Figure|Fig\.)\s*(\d+)\s*[:.]/i
+/** "Figure 3", "Table S1" … from a caption line. */
+function captionLabel(text: string): { label: string; table: boolean } {
+  const m = text.match(CAPTION)!
+  const k = m[1].toLowerCase()
+  const kind = k.startsWith('fig') ? 'Figure' : k.startsWith('tab') ? 'Table' : m[1]
+  return { label: `${kind} ${m[2]}`, table: kind === 'Table' || kind === '표' }
+}
+
+/** "(a) SMAC": a sub-figure label; it belongs to the caption, not the figure's image. */
+const SUBCAPTION = /^\(([a-z]|[ivx]{1,4}|\d{1,2})\)(\s|$)/i
+
+const FUNCTION_WORDS = /\b(the|of|and|to|in|is|are|we|for|that|with|on|as|by|this|be|it|from|an|or|which|our|이|그|및|의)\b/i
+
+/** Grid cell size for blobs, in PDF points. */
+const CELL = 2
+/** Ink this close (points) belongs to one blob. */
+const JOIN = 6
+/** Blobs this far apart (points) can still be claimed by the same caption, unless prose is in between. */
+const REACH = 60
+/** Points from the page edges where content can be. */
+const MARGIN = 8
 
 interface Line {
   text: string
@@ -50,13 +78,22 @@ interface Line {
   h: number
 }
 
+interface Rect {
+  x0: number
+  y0: number
+  x1: number
+  y1: number
+}
+
 /** Text lines of a page, in PDF points with y growing downwards. */
 async function pageLines(page: Awaited<ReturnType<PDFDocumentProxy['getPage']>>, pageHeight: number): Promise<Line[]> {
   const content = await page.getTextContent()
   const items: { str: string; x: number; y: number; w: number; h: number }[] = []
   for (const it of content.items) {
     if (!('str' in it) || !it.str.trim()) continue
-    const [, , c, d, e, f] = it.transform as number[]
+    const [a, b, c, d, e, f] = it.transform as number[]
+    // Rotated text (a sideways table, a y-axis label) is left as graphics.
+    if (Math.abs(b) > Math.abs(a) * 0.2) continue
     const h = Math.hypot(c, d) || it.height
     items.push({ str: it.str, x: e, y: pageHeight - f, w: it.width, h })
   }
@@ -68,26 +105,28 @@ async function pageLines(page: Awaited<ReturnType<PDFDocumentProxy['getPage']>>,
     if (line) line.parts.push(it)
     else lines.push({ y: it.y, h: it.h, parts: [it] })
   }
-  // A line can hold two columns' text at the same baseline; split it at wide gaps.
+  // Text at one baseline can belong to two columns or table cells; split at wide gaps.
   const out: Line[] = []
   for (const l of lines) {
     const parts = l.parts.sort((a, b) => a.x - b.x)
     let run: typeof parts = []
     const flush = (): void => {
       if (!run.length) return
+      const h = Math.max(...run.map((p) => p.h))
       out.push({
         text: run.map((p) => p.str).join(' ').replace(/\s+/g, ' ').trim(),
         x0: run[0].x,
         x1: Math.max(...run.map((p) => p.x + p.w)),
-        top: l.y - l.h * 0.85,
-        bottom: l.y + l.h * 0.25,
-        h: l.h
+        top: l.y - h * 0.85,
+        bottom: l.y + h * 0.25,
+        h
       })
       run = []
     }
     for (const p of parts) {
       const prev = run[run.length - 1]
-      if (prev && p.x - (prev.x + prev.w) > l.h * 2.5) flush()
+      // A caption starts its own line even when a figure label shares its baseline.
+      if (prev && (p.x - (prev.x + prev.w) > l.h * 2.5 || CAPTION.test(p.str))) flush()
       run.push(p)
     }
     flush()
@@ -95,168 +134,290 @@ async function pageLines(page: Awaited<ReturnType<PDFDocumentProxy['getPage']>>,
   return out.sort((a, b) => a.top - b.top || a.x0 - b.x0)
 }
 
-/**
- * Body text fills most of the column with many characters. Plot titles and
- * legend rows ("MAPPO IPPO QMix …") can be as wide, but are short in text.
- */
-function isBodyLine(l: Line, colW: number): boolean {
-  return l.x1 - l.x0 > colW * 0.6 && l.text.length >= colW / 7 && !CAPTION.test(l.text)
-}
+const overlapX = (a: Rect, x0: number, x1: number): number => Math.min(a.x1, x1) - Math.max(a.x0, x0)
+const overlapY = (a: Rect, y0: number, y1: number): number => Math.min(a.y1, y1) - Math.max(a.y0, y0)
 
-/** "(a) SMAC": a sub-figure label, which belongs to the figure. */
-const SUBCAPTION = /^\(([a-z]|[ivx]{1,4}|\d{1,2})\)\s/i
-
-/** Finds the figures of a paper. Pages are rendered once at low resolution to trim regions to their ink. */
+/** Finds the figures and tables of a paper. Each page with a caption is rendered once at low resolution. */
 export async function extractFigures(doc: PDFDocumentProxy, onSkip?: (label: string, page: number, why: string) => void): Promise<PaperFigure[]> {
   const figures: PaperFigure[] = []
   const seen = new Set<string>()
+  // Body font size: the most common size of long lines across the paper (a
+  // page that is mostly a table would mislead a per-page estimate).
+  const pages: Line[][] = []
+  const sizes: number[] = []
   for (let n = 1; n <= doc.numPages; n++) {
     const page = await doc.getPage(n)
     const vp = page.getViewport({ scale: 1 })
     const lines = await pageLines(page, vp.height)
-    const captions = lines.filter((l) => CAPTION.test(l.text))
-    if (captions.length === 0) continue
+    pages.push(lines)
+    for (const l of lines) if (l.x1 - l.x0 > vp.width * 0.25) sizes.push(Math.round(l.h * 2) / 2)
+  }
+  const count = (v: number): number => sizes.filter((s) => s === v).length
+  const bodySize = [...new Set(sizes)].sort((a, b) => count(b) - count(a))[0] ?? 10
 
-    // The text area, from lines long enough to be body text.
+  for (let n = 1; n <= doc.numPages; n++) {
+    const page = await doc.getPage(n)
+    const vp = page.getViewport({ scale: 1 })
+    const lines = pages[n - 1]
+    const capLines = lines.filter((l) => CAPTION.test(l.text))
+    if (capLines.length === 0) continue
+
+    // Text area and body font size, from lines long enough to be body text.
     const long = lines.filter((l) => l.x1 - l.x0 > vp.width * 0.25)
     if (long.length === 0) continue
     const left = Math.min(...long.map((l) => l.x0))
     const right = Math.max(...long.map((l) => l.x1))
     const mid = (left + right) / 2
-    // Body font size: the most common size among body-width lines.
-    const sizes = long.map((l) => Math.round(l.h * 2) / 2)
-    const bodySize = sizes.sort((a, b) => sizes.filter((v) => v === b).length - sizes.filter((v) => v === a).length)[0]
-    // Text set at body size or larger (body text, the last short line of a
-    // paragraph, headings) is never part of a figure; labels inside plots are
-    // smaller, and image-only figures have no text at all.
-    const isProse = (l: Line, colW: number): boolean =>
-      isBodyLine(l, colW) || (l.h >= bodySize * 0.92 && l.text.length >= 3 && !SUBCAPTION.test(l.text) && !CAPTION.test(l.text))
+    // Text at body size or larger is prose (or a heading, caption, sub-figure
+    // label), never a figure's own graphics; plot labels are smaller.
+    const isProseSize = (l: Line): boolean => (l.h >= bodySize * 0.92 && l.text.length >= 2) || SUBCAPTION.test(l.text)
+    // A paragraph line, which a figure never extends across.
+    const isParagraph = (l: Line, colW: number): boolean =>
+      l.h >= bodySize * 0.92 &&
+      l.x1 - l.x0 > colW * 0.6 &&
+      l.text.length >= colW / 7 &&
+      !CAPTION.test(l.text) &&
+      (l.text.match(/\d/g)?.length ?? 0) < l.text.length * 0.3 &&
+      // Prose is mostly lowercase; a table's header row ("Map MAPPO(FP) IPPO QMix") is not.
+      (l.text.match(/[a-z]/g)?.length ?? 0) > (l.text.match(/[A-Za-z]/g)?.length ?? 0) * 0.6 &&
+      // …and reads as sentences: a table header row has no function words.
+      FUNCTION_WORDS.test(l.text)
 
-    const found: { label: string; caption: string; x0: number; x1: number; top: number; bottom: number }[] = []
-    // Each caption's block: following lines close below it in the same column.
-    const blocks = captions.map((cap) => {
+    // --- 1. Ink blobs, with prose erased ---------------------------------------
+    const gw = Math.ceil(vp.width / CELL)
+    const gh = Math.ceil(vp.height / CELL)
+    const ink = await inkGrid(page, gw, gh)
+    if (!ink) continue
+    for (const l of lines) {
+      if (!isProseSize(l)) continue
+      const pad = l.h * 0.15
+      const cx0 = Math.max(0, Math.floor((l.x0 - pad) / CELL))
+      const cx1 = Math.min(gw - 1, Math.ceil((l.x1 + pad) / CELL))
+      for (let y = Math.max(0, Math.floor((l.top - pad) / CELL)); y <= Math.min(gh - 1, Math.ceil((l.bottom + pad) / CELL)); y++) {
+        ink.fill(0, y * gw + cx0, y * gw + cx1 + 1)
+      }
+    }
+    const blobs = findBlobs(ink, gw, gh, Math.round(JOIN / CELL))
+      .map((b) => ({ x0: b.x0 * CELL, y0: b.y0 * CELL, x1: (b.x1 + 1) * CELL, y1: (b.y1 + 1) * CELL }))
+      .filter((b) => b.x0 > MARGIN - CELL && b.x1 < vp.width - MARGIN + CELL)
+      // Specks (dots, short marks) don't make a figure on their own; long rules (tables) do.
+      .filter((b) => (b.x1 - b.x0) * (b.y1 - b.y0) > 60 || b.x1 - b.x0 > 40)
+
+    // --- 2. Captions: the label line plus the lines of its block -----------------
+    const captions = capLines.map((cap) => {
       const block = [cap]
       for (const l of lines) {
         const last = block[block.length - 1]
         if (l.top <= last.top || block.includes(l)) continue
         const gap = l.top - last.bottom
-        const overlaps = l.x0 < cap.x1 + 5 && l.x1 > cap.x0 - 5
-        if (overlaps && gap < (last.bottom - last.top) * 0.9) block.push(l)
+        // Continuation lines sit under the first one (not in a neighbouring caption or column).
+        const overlaps = Math.min(l.x1, cap.x1 + 5) - Math.max(l.x0, cap.x0 - 5) > (l.x1 - l.x0) * 0.7
+        // …in the caption's font, and not split into cells like a table row right below it.
+        const sameFont = Math.abs(l.h - cap.h) < 0.6
+        const cells = lines.some((o) => o !== l && Math.abs(o.top - l.top) < 1)
+        // Line spacing, not the larger gap before the next paragraph.
+        if (overlaps && sameFont && !cells && gap < cap.h * 0.45 && !CAPTION.test(l.text)) block.push(l)
         else if (overlaps && gap >= 0) break
       }
-      return {
-        cap,
-        lines: block,
+      const box: Rect = {
         x0: Math.min(...block.map((l) => l.x0)),
+        y0: cap.top,
         x1: Math.max(...block.map((l) => l.x1)),
-        bottom: Math.max(...block.map((l) => l.bottom))
+        y1: Math.max(...block.map((l) => l.bottom))
       }
+      return { block, box, ...captionLabel(cap.text) }
     })
 
-    for (const b of blocks) {
-      const { cap } = b
-      const label = `Figure ${cap.text.match(CAPTION)![2]}`
-      if (seen.has(label)) {
-        onSkip?.(label, n, 'duplicate')
+    // --- 3. Pairing ---------------------------------------------------------------
+    const claimed = new Set<number>()
+    for (const c of captions) {
+      if (seen.has(c.label)) {
+        onSkip?.(c.label, n, 'duplicate')
         continue
       }
-      // Column of the figure: the whole width for a wide caption.
-      const wide = b.x1 - b.x0 > (right - left) * 0.55 || (b.x0 < mid - 20 && b.x1 > mid + 20)
-      const x0 = wide ? left : b.x0 < mid ? left : mid
-      const x1 = wide ? right : b.x0 < mid ? mid : right
-      // Figures may be wider than the text: look for ink out to the page's
-      // edges on the outer side(s); the trim finds the real extent.
-      const inkX0 = wide || b.x0 < mid ? EDGE : mid
-      const inkX1 = wide || b.x0 >= mid ? vp.width - EDGE : mid
-      const colW = x1 - x0
-      // The figure ends upwards at the nearest body text or another figure's
-      // caption above it in that column; else at the page's top margin (an
-      // image-only figure has no text of its own). The ink trims it.
-      const ceilings = [
-        ...lines.filter((l) => l.bottom <= cap.top + 1 && l.x0 < x1 && l.x1 > x0 && isProse(l, colW)).map((l) => l.bottom),
-        ...blocks.filter((o) => o !== b && o.bottom <= cap.top + 1 && o.x0 < x1 && o.x1 > x0).map((o) => o.bottom)
-      ]
-      const top = ceilings.length ? Math.max(...ceilings) + 1 : TOP_MARGIN
-      if (cap.top - top < 30) {
-        onSkip?.(label, n, 'no room above the caption')
-        continue
-      }
-      found.push({
-        label,
-        caption: b.lines.map((l) => l.text).join(' ').replace(/-\s(?=[a-z])/g, ''),
-        x0: inkX0,
-        x1: inkX1,
-        top,
-        bottom: cap.top - 1
-      })
-    }
-    if (found.length === 0) continue
+      const wide = c.box.x1 - c.box.x0 > (right - left) * 0.55 || (c.box.x0 < mid - 20 && c.box.x1 > mid + 20)
+      const col = { x0: wide || c.box.x0 < mid ? MARGIN : mid, x1: wide || c.box.x0 >= mid ? vp.width - MARGIN : mid }
+      const colW = wide ? right - left : (right - left) / 2
+      // Prose and other captions: a figure never reaches across them.
+      const walls: Rect[] = [
+        ...lines.filter((l) => isParagraph(l, colW)).map((l) => ({ x0: l.x0, y0: l.top, x1: l.x1, y1: l.bottom })),
+        ...captions.filter((o) => o !== c).map((o) => o.box)
+      ].filter((w) => overlapX(w, col.x0, col.x1) > colW * 0.3)
+      const blocked = (y0: number, y1: number): boolean => walls.some((w) => w.y0 < y1 && w.y1 > y0)
+      const free = (i: number): boolean => !claimed.has(i) && overlapX(blobs[i], col.x0, col.x1) >= Math.min(blobs[i].x1 - blobs[i].x0, 10)
 
-    // Trim each region to its ink.
-    const scale = 1.5
-    const rvp = page.getViewport({ scale })
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.ceil(rvp.width)
-    canvas.height = Math.ceil(rvp.height)
-    const ctx = canvas.getContext('2d', { willReadFrequently: true })
-    if (!ctx) continue
-    ctx.fillStyle = '#fff'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-    await page.render({ canvasContext: ctx, viewport: rvp }).promise
-    for (const f of found) {
-      const ink = inkBox(ctx, f.x0 * scale, f.top * scale, f.x1 * scale, f.bottom * scale)
-      if (!ink) {
-        onSkip?.(f.label, n, 'no ink')
+      /** Claims blobs outwards from the caption, up or down, while they keep coming. */
+      const grow = (dir: 'up' | 'down'): number[] => {
+        const got: number[] = []
+        let edge = dir === 'up' ? c.box.y0 : c.box.y1
+        for (;;) {
+          let best = -1
+          let bestGap = Infinity
+          blobs.forEach((b, i) => {
+            if (!free(i) || got.includes(i)) return
+            const gap = dir === 'up' ? edge - b.y1 : b.y0 - edge
+            if (gap < -4 || gap > REACH || gap >= bestGap) return
+            if (dir === 'up' ? blocked(b.y1, edge) : blocked(edge, b.y0)) return
+            best = i
+            bestGap = gap
+          })
+          if (best < 0) break
+          got.push(best)
+          // Blobs level with the new one (a row of sub-plots) join too.
+          const row = blobs[best]
+          blobs.forEach((b, i) => {
+            if (free(i) && !got.includes(i) && overlapY(b, row.y0, row.y1) > 0) got.push(i)
+          })
+          edge = dir === 'up' ? Math.min(...got.map((i) => blobs[i].y0)) : Math.max(...got.map((i) => blobs[i].y1))
+        }
+        return got
+      }
+      /** A caption beside its figure: blobs level with the caption, left or right of it. */
+      const side = (): number[] =>
+        blobs.flatMap((b, i) => {
+          if (claimed.has(i) || overlapY(b, c.box.y0, c.box.y1) < Math.min(b.y1 - b.y0, c.box.y1 - c.box.y0) * 0.3) return []
+          const gap = b.x1 <= c.box.x0 ? c.box.x0 - b.x1 : b.x0 >= c.box.x1 ? b.x0 - c.box.x1 : -1
+          return gap >= 0 && gap < 30 ? [i] : []
+        })
+
+      /**
+       * A table is mostly text (erased with the prose) and a few rules: take
+       * the lines next to its caption, above or below, until a paragraph,
+       * another caption or a wide gap, plus the rules among them.
+       */
+      const tableRows = (dir: 'up' | 'down'): { r: Rect; lines: number } | null => {
+        let r: Rect | null = null
+        let count = 0
+        let edge = dir === 'down' ? c.box.y1 : c.box.y0
+        const seq = lines.filter((l) => (dir === 'down' ? l.top >= c.box.y1 - 1 : l.bottom <= c.box.y0 + 1) && !c.block.includes(l))
+        if (dir === 'up') seq.reverse()
+        for (const l of seq) {
+          if (overlapX({ x0: l.x0, y0: 0, x1: l.x1, y1: 0 }, col.x0, col.x1) <= 0) continue
+          const gap = dir === 'down' ? l.top - edge : edge - l.bottom
+          if (gap > bodySize * 2.2 || isParagraph(l, colW) || CAPTION.test(l.text)) break
+          r = r ? { x0: Math.min(r.x0, l.x0), y0: Math.min(r.y0, l.top), x1: Math.max(r.x1, l.x1), y1: Math.max(r.y1, l.bottom) } : { x0: l.x0, y0: l.top, x1: l.x1, y1: l.bottom }
+          edge = dir === 'down' ? Math.max(edge, l.bottom) : Math.min(edge, l.top)
+          count++
+        }
+        return r && count >= 2 ? { r, lines: count } : null
+      }
+      const tableBox = (): Rect | null => {
+        const down = tableRows('down')
+        const up = tableRows('up')
+        const pick = down && up ? (down.lines >= up.lines ? down : up) : (down ?? up)
+        if (!pick) return null
+        const t = pick.r
+        // Rules just around and among the rows.
+        blobs.forEach((b, i) => {
+          if (!free(i) || b.y1 < t.y0 - 8 || b.y0 > t.y1 + 8 || overlapX(b, t.x0 - 30, t.x1 + 30) <= 0) return
+          if (b.y1 - b.y0 > 6 && (b.y0 < t.y0 - 8 || b.y1 > t.y1 + 8)) return // not a rule
+          t.x0 = Math.min(t.x0, b.x0)
+          t.x1 = Math.max(t.x1, b.x1)
+          t.y0 = Math.min(t.y0, b.y0)
+          t.y1 = Math.max(t.y1, b.y1)
+          claimed.add(i)
+        })
+        return t
+      }
+
+      const boxOf = (got: number[]): Rect | null =>
+        got.length
+          ? {
+              x0: Math.min(...got.map((i) => blobs[i].x0)),
+              y0: Math.min(...got.map((i) => blobs[i].y0)),
+              x1: Math.max(...got.map((i) => blobs[i].x1)),
+              y1: Math.max(...got.map((i) => blobs[i].y1))
+            }
+          : null
+      let got: number[] = []
+      let r: Rect | null = null
+      if (c.table) r = tableBox()
+      if (!r) {
+        const order = c.table ? [() => grow('up'), side] : [() => grow('up'), side, () => grow('down')]
+        for (const f of order) {
+          got = f()
+          if (got.length) break
+        }
+        r = boxOf(got)
+      }
+      if (!r) {
+        onSkip?.(c.label, n, 'nothing next to the caption')
         continue
       }
-      const pad = 3 * scale
-      const bx0 = Math.max(0, ink.x0 - pad) / scale
-      // The margin never reaches past the text around the figure (a heading
-      // right above it, or the caption below).
-      const by0 = Math.max(f.top * scale, ink.y0 - pad) / scale
-      const bx1 = Math.min(canvas.width, ink.x1 + pad) / scale
-      const by1 = Math.min(f.bottom * scale, ink.y1 + pad) / scale
-      if (by1 - by0 < 20 || bx1 - bx0 < 20) {
-        onSkip?.(f.label, n, 'too small')
+      if (r.x1 - r.x0 < 30 || r.y1 - r.y0 < 15) {
+        onSkip?.(c.label, n, 'too small')
         continue
       }
-      seen.add(f.label)
+      got.forEach((i) => claimed.add(i))
+      seen.add(c.label)
+      const pad = 2
+      const x0 = Math.max(0, r.x0 - pad)
+      const y0 = Math.max(0, r.y0 - pad)
       figures.push({
-        label: f.label,
+        label: c.label,
         page: n,
-        x: bx0 / vp.width,
-        y: by0 / vp.height,
-        width: (bx1 - bx0) / vp.width,
-        height: (by1 - by0) / vp.height,
-        caption: f.caption
+        x: x0 / vp.width,
+        y: y0 / vp.height,
+        width: (Math.min(vp.width, r.x1 + pad) - x0) / vp.width,
+        height: (Math.min(vp.height, r.y1 + pad) - y0) / vp.height,
+        caption: c.block.map((l) => l.text).join(' ').replace(/-\s(?=[a-z])/g, '')
       })
     }
   }
   return figures
 }
 
-/** Bounding box of non-white pixels inside a canvas rectangle. */
-function inkBox(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number): { x0: number; y0: number; x1: number; y1: number } | null {
-  const sx = Math.max(0, Math.floor(x0))
-  const sy = Math.max(0, Math.floor(y0))
-  const w = Math.min(ctx.canvas.width, Math.ceil(x1)) - sx
-  const h = Math.min(ctx.canvas.height, Math.ceil(y1)) - sy
-  if (w <= 0 || h <= 0) return null
-  const data = ctx.getImageData(sx, sy, w, h).data
-  let minX = w
-  let minY = h
-  let maxX = -1
-  let maxY = -1
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = (y * w + x) * 4
-      if (data[i] < 235 || data[i + 1] < 235 || data[i + 2] < 235) {
-        if (x < minX) minX = x
-        if (x > maxX) maxX = x
-        if (y < minY) minY = y
-        if (y > maxY) maxY = y
-      }
+/** Renders a page into a grid of CELL-point cells: 1 where anything is drawn. */
+async function inkGrid(page: Awaited<ReturnType<PDFDocumentProxy['getPage']>>, gw: number, gh: number): Promise<Uint8Array | null> {
+  const vp = page.getViewport({ scale: 1 })
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.ceil(vp.width)
+  canvas.height = Math.ceil(vp.height)
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) return null
+  ctx.fillStyle = '#fff'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  await page.render({ canvasContext: ctx, viewport: vp }).promise
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data
+  const grid = new Uint8Array(gw * gh)
+  for (let y = 0; y < canvas.height; y++) {
+    for (let x = 0; x < canvas.width; x++) {
+      const i = (y * canvas.width + x) * 4
+      if (data[i] < 235 || data[i + 1] < 235 || data[i + 2] < 235) grid[Math.floor(y / CELL) * gw + Math.floor(x / CELL)] = 1
     }
   }
-  return maxX < 0 ? null : { x0: sx + minX, y0: sy + minY, x1: sx + maxX + 1, y1: sy + maxY + 1 }
+  return grid
+}
+
+/** Connected groups of ink cells; cells up to `join` apart are connected. Returns boxes in cells. */
+function findBlobs(grid: Uint8Array, gw: number, gh: number, join: number): Rect[] {
+  const seen = new Uint8Array(gw * gh)
+  const out: Rect[] = []
+  const stack: number[] = []
+  for (let start = 0; start < grid.length; start++) {
+    if (!grid[start] || seen[start]) continue
+    const box = { x0: gw, y0: gh, x1: -1, y1: -1 }
+    seen[start] = 1
+    stack.push(start)
+    while (stack.length) {
+      const p = stack.pop()!
+      const px = p % gw
+      const py = (p - px) / gw
+      if (px < box.x0) box.x0 = px
+      if (px > box.x1) box.x1 = px
+      if (py < box.y0) box.y0 = py
+      if (py > box.y1) box.y1 = py
+      for (let y = Math.max(0, py - join); y <= Math.min(gh - 1, py + join); y++) {
+        for (let x = Math.max(0, px - join); x <= Math.min(gw - 1, px + join); x++) {
+          const q = y * gw + x
+          if (grid[q] && !seen[q]) {
+            seen[q] = 1
+            stack.push(q)
+          }
+        }
+      }
+    }
+    out.push(box)
+  }
+  return out
 }

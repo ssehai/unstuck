@@ -7,7 +7,8 @@
 export interface ExplainRequest {
   system: string
   text: string
-  image?: string // base64 PNG
+  /** base64 PNGs, in the order the prompt refers to them. */
+  images?: string[]
   sessionId?: string
   /** Model override, e.g. 'haiku' for cheap summaries. */
   model?: string

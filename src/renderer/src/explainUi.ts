@@ -123,9 +123,9 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
   }
 
   /** Streams one model reply into `block`. Resolves to the text, or null on failure. */
-  const stream1 = async (block: HTMLElement, text: string, image?: string): Promise<string | null> => {
+  const stream1 = async (block: HTMLElement, text: string, images?: string[]): Promise<string | null> => {
     let frame = 0
-    stream = explain({ system, text, image, sessionId: record?.sessionId }, (full) => {
+    stream = explain({ system, text, images, sessionId: record?.sessionId }, (full) => {
       cancelAnimationFrame(frame)
       frame = requestAnimationFrame(() => (block.innerHTML = renderMarkdown(full)))
     })
@@ -256,8 +256,11 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
     }
   })
 
-  const showImage = (dataUrl: string): void => {
-    slot.innerHTML = `<figure class="sp-capture"><img alt="Image sent with the question" src="${dataUrl}"><figcaption>Sent with your question</figcaption></figure>`
+  const showImages = (urls: string[]): void => {
+    if (urls.length === 0) return
+    const imgs = urls.map((u) => `<img alt="Image sent with the question" src="${u}">`).join('')
+    const note = urls.length > 1 ? `Sent with your question (${urls.length} images)` : 'Sent with your question'
+    slot.innerHTML = `<figure class="sp-capture${urls.length > 1 ? ' many' : ''}">${imgs}<figcaption>${note}</figcaption></figure>`
   }
 
   ;(async () => {
@@ -276,7 +279,7 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
 
     // Reopening a saved stuck point: replay it, then allow continuing.
     if (record) {
-      if (record.image) showImage(record.image)
+      showImages(record.images ?? (record.image ? [record.image] : []))
       record.turns.forEach((t, i) => {
         if (t.role === 'user' && i > 0) addQuestion(t.display)
         if (t.role === 'assistant') addAnswer(t.text)
@@ -294,12 +297,11 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
     const sel = (src as { sel: StuckSelection }).sel
     const q = await buildQuestion(sel, deps.reader, deps.container, home, !!home && isSent(home, { appendix }))
     if (cancelled) return
-    const { text, imageUrl } = q
-    if (imageUrl) showImage(imageUrl)
-    const image = base64Of(imageUrl)
+    const { text, imageUrls } = q
+    showImages(imageUrls)
     const block = thinking('Reading the paper…')
     thread.appendChild(block)
-    const reply = await stream1(block, text, image)
+    const reply = await stream1(block, text, imageUrls.map(base64Of))
     if (cancelled) return
     const paperId = deps.paperId()
     if (reply === null || !paperId) {
@@ -320,7 +322,7 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
       page: anchors[0].page,
       pageEnd: anchors[0].pageEnd,
       quote: anchors[0].quote,
-      image: imageUrl,
+      images: imageUrls.length ? imageUrls : undefined,
       figure: anchors[0].figure,
       parts: anchors.length > 1 ? anchors : undefined,
       sessionId: pendingSession,

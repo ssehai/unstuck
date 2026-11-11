@@ -126,7 +126,7 @@ export function startEvaluation(sel: StuckSelection, body: HTMLElement, deps: Ev
 
   const slotOf = (arm: Arm): number => order.indexOf(arm)
 
-  const run = (arm: Arm, req: { system: string; text: string; image?: string }): void => {
+  const run = (arm: Arm, req: { system: string; text: string; images?: string[] }): void => {
     const pane = panes[slotOf(arm)]
     const state = tabs[slotOf(arm)].querySelector('.ev-tab-state')!
     const t0 = performance.now()
@@ -166,12 +166,11 @@ export function startEvaluation(sel: StuckSelection, body: HTMLElement, deps: Ev
     const appendix = anchors.some((a) => needsAppendix(paras, a.page, a.quote, paragraphAt(paras, a.page, a.quote)?.text ?? ''))
     const q = await buildQuestion(sel, deps.reader, deps.container, home, !!home && isSent(home, { appendix }))
     if (cancelled) return
-    const image = base64Of(q.imageUrl)
-    imageSent = !!image
-    run('tool', { system: systemPrompt(deps.title(), formatPaper(paras, { appendix })), text: q.text, image })
+    imageSent = q.imageUrls.length > 0
+    run('tool', { system: systemPrompt(deps.title(), formatPaper(paras, { appendix })), text: q.text, images: q.imageUrls.map(base64Of) })
     // The baseline gets what a chatbot user would paste (for a figure, the
     // same screenshot), so only the paper context differs.
-    run('baseline', { system: baselineSystemPrompt(), text: q.baseline.text, image: q.baseline.withImage ? image : undefined })
+    run('baseline', { system: baselineSystemPrompt(), text: q.baseline.text, images: q.baseline.imageUrls.map(base64Of) })
   })()
 
   // --- Step 1: blind rating -------------------------------------------------------

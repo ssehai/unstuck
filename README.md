@@ -46,9 +46,11 @@ Details are in the technical report.
 - Trackpad pinch zoom, ⌘+ / ⌘− / ⌘0 (fit width)
 - Find in the paper (⌘F) and in the side panel (⌘⇧F)
 - **Several places at once**: hold ⌘ while selecting (or clicking a figure) to add more places; they are
-  numbered ①②… and asked about together, e.g. a term and its definition four pages later
-- **Figures are clickable**: figures and their captions are found when a paper is first opened; click one
-  to ask about the whole figure (its image and caption are sent)
+  numbered ①②… and asked about together, e.g. a term and its definition four pages later; every figure and
+  equation among them is sent as an image
+- **Figures and tables are clickable**: they are found with their captions when a paper is first opened
+  (graphics are grouped into blobs and paired with the nearest caption, above, below or beside); click one
+  to ask about it, and its image and caption are sent
 
 **Explaining (LLM)**
 - Explanation / example / evidence for the selected passage, streamed as it is generated

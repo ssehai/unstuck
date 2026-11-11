@@ -35,8 +35,10 @@ export interface StuckRecord {
   pageEnd: number
   /** The selected passage; also used to find it again in the page. */
   quote: string
-  /** Equation image sent with the first question (data URL), if any. */
+  /** Image sent with the first question (data URL), if any. Older records; see `images`. */
   image?: string
+  /** Images sent with the first question (data URLs): figures and equations. */
+  images?: string[]
   /** Set when the stuck point is a whole figure (`quote` is then its caption). */
   figure?: PaperFigure
   /**

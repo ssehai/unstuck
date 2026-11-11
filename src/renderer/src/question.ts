@@ -12,10 +12,10 @@ import type { StuckSelection } from './selection'
 export interface Question {
   /** Prompt for Unstuck. */
   text: string
-  /** PNG data URL of the image sent with it, if any. */
-  imageUrl?: string
-  /** What a chatbot user would paste (evaluation baseline). */
-  baseline: { text: string; withImage: boolean }
+  /** PNG data URLs of the images sent with it, in the order the prompt names them. */
+  imageUrls: string[]
+  /** What a chatbot user would paste (evaluation baseline): which of the images go with it. */
+  baseline: { text: string; imageUrls: string[] }
 }
 
 /** The image for one selection: the figure itself, or the block around an equation. */
@@ -37,32 +37,36 @@ export async function buildQuestion(
 ): Promise<Question> {
   if (sel.parts && sel.parts.length > 1) {
     const parts = sel.parts.map((p) => ({ text: p.text, page: p.pageStart, figure: p.figure?.label }))
-    // One image per request: the first figure, else the first equation.
-    const order = [...sel.parts.keys()].sort((a, b) => Number(!sel.parts![a].figure) - Number(!sel.parts![b].figure))
-    for (const i of order) {
-      const imageUrl = await imageFor(sel.parts[i], reader, container)
-      if (imageUrl) {
-        return { text: multiPrompt(parts, i), imageUrl, baseline: { text: baselineMultiPrompt(parts), withImage: !!sel.parts[i].figure } }
-      }
+    // Every figure and equation among the places goes along, in place order.
+    const imageUrls: string[] = []
+    const imagesOf: number[] = []
+    const pasted: string[] = []
+    for (const [i, p] of sel.parts.entries()) {
+      const url = await imageFor(p, reader, container)
+      if (!url) continue
+      imageUrls.push(url)
+      imagesOf.push(i)
+      if (p.figure) pasted.push(url) // a chatbot user would paste figure screenshots too
     }
-    return { text: multiPrompt(parts), baseline: { text: baselineMultiPrompt(parts), withImage: false } }
+    return { text: multiPrompt(parts, imagesOf), imageUrls, baseline: { text: baselineMultiPrompt(parts), imageUrls: pasted } }
   }
-  const imageUrl = (await imageFor(sel, reader, container)) ?? undefined
+  const url = await imageFor(sel, reader, container)
+  const imageUrls = url ? [url] : []
   if (sel.figure) {
     // For a figure, a chatbot user would paste a screenshot and the caption:
     // the baseline gets the same image, so only the paper context differs.
     return {
       text: figurePrompt(sel.figure.label, sel.figure.caption, sel.figure.page),
-      imageUrl,
-      baseline: { text: baselineFigurePrompt(sel.figure.caption), withImage: true }
+      imageUrls,
+      baseline: { text: baselineFigurePrompt(sel.figure.caption), imageUrls }
     }
   }
   return {
     text: userPrompt(sel.text, sel.pageStart, home, homeIsInPaper),
-    imageUrl,
-    baseline: { text: baselineUserPrompt(sel.text), withImage: false }
+    imageUrls,
+    baseline: { text: baselineUserPrompt(sel.text), imageUrls: [] }
   }
 }
 
 /** The base64 payload of a PNG data URL, as the LLM request wants it. */
-export const base64Of = (dataUrl?: string): string | undefined => dataUrl?.replace(/^data:image\/png;base64,/, '')
+export const base64Of = (dataUrl: string): string => dataUrl.replace(/^data:image\/png;base64,/, '')

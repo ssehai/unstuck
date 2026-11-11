@@ -73,11 +73,15 @@ const describePart = (p: QuestionPart, i: number): string =>
  * the connection: a term and its definition, an equation and its prose, a
  * figure and the claim it supports.
  */
-export function multiPrompt(parts: QuestionPart[], imageOf?: number): string {
+export function multiPrompt(parts: QuestionPart[], imagesOf: number[] = []): string {
   return [
     `The student selected ${parts.length} places in the paper and asks about them together:`,
     ...parts.map(describePart),
-    imageOf !== undefined ? `The attached image shows ${CIRCLED[imageOf]}.` : '',
+    imagesOf.length === 1
+      ? `The attached image shows ${CIRCLED[imagesOf[0]]}.`
+      : imagesOf.length > 1
+        ? `The ${imagesOf.length} attached images show, in order: ${imagesOf.map((i) => CIRCLED[i]).join(', ')}.`
+        : '',
     '',
     `Explain them together: say briefly what each one is, and above all how they relate in this paper. Refer to them as ${CIRCLED.slice(0, parts.length).split('').join(', ')} (these circled numbers, not [1], [2]).`
   ]

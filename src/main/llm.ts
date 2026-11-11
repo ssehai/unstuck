@@ -21,8 +21,8 @@ export interface ExplainRequest {
   id: string
   system: string
   text: string
-  /** PNG as base64 (no data: prefix). */
-  image?: string
+  /** PNGs as base64 (no data: prefix), in the order the prompt refers to them. */
+  images?: string[]
   /** Continue an earlier conversation. */
   sessionId?: string
   /** Model override (CLI alias like 'haiku', or a full model id). */
@@ -46,9 +46,14 @@ type ContentBlock =
   | { type: 'text'; text: string }
   | { type: 'image'; source: { type: 'base64'; media_type: 'image/png'; data: string } }
 
+const MAX_IMAGES = 8
+
 function userContent(req: ExplainRequest): ContentBlock[] {
   const content: ContentBlock[] = []
-  if (req.image) content.push({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: req.image } })
+  // The prompt says which place each image shows, in this order.
+  for (const data of (req.images ?? []).slice(0, MAX_IMAGES)) {
+    if (typeof data === 'string' && data) content.push({ type: 'image', source: { type: 'base64', media_type: 'image/png', data } })
+  }
   content.push({ type: 'text', text: req.text })
   return content
 }
