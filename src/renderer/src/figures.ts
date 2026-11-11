@@ -33,10 +33,12 @@ export interface PaperFigure {
   height: number
   /** Full caption text, starting with the label. */
   caption: string
+  /** Sub-figures "(a)", "(b)" … with their own regions, when the figure has them. */
+  parts?: PaperFigure[]
 }
 
 /** Bump when detection changes, so saved figures are found again. */
-export const FIGURES_VERSION = 7
+export const FIGURES_VERSION = 8
 
 /**
  * A caption's first line: a kind, a number ("3", "S1", "A.2", "3a", "IV"),
@@ -126,7 +128,7 @@ async function pageLines(page: Awaited<ReturnType<PDFDocumentProxy['getPage']>>,
     for (const p of parts) {
       const prev = run[run.length - 1]
       // A caption starts its own line even when a figure label shares its baseline.
-      if (prev && (p.x - (prev.x + prev.w) > l.h * 2.5 || CAPTION.test(p.str))) flush()
+      if (prev && (p.x - (prev.x + prev.w) > l.h * 2.5 || CAPTION.test(p.str) || SUBCAPTION.test(p.str))) flush()
       run.push(p)
     }
     flush()
@@ -139,8 +141,6 @@ const overlapY = (a: Rect, y0: number, y1: number): number => Math.min(a.y1, y1)
 
 /** Finds the figures and tables of a paper. Each page with a caption is rendered once at low resolution. */
 export async function extractFigures(doc: PDFDocumentProxy, onSkip?: (label: string, page: number, why: string) => void): Promise<PaperFigure[]> {
-  const figures: PaperFigure[] = []
-  const seen = new Set<string>()
   // Body font size: the most common size of long lines across the paper (a
   // page that is mostly a table would mislead a per-page estimate).
   const pages: Line[][] = []
@@ -155,6 +155,21 @@ export async function extractFigures(doc: PDFDocumentProxy, onSkip?: (label: str
   const count = (v: number): number => sizes.filter((s) => s === v).length
   const bodySize = [...new Set(sizes)].sort((a, b) => count(b) - count(a))[0] ?? 10
 
+  // Tables put their caption either above or below, consistently within a
+  // paper. Where both sides of a table caption hold rows (two tables stacked
+  // on a page), the paper's own convention decides; it is learned in a first
+  // pass from the tables where only one side does.
+  const inks = new Map<number, Uint8Array | null>()
+  const first = await scan(null)
+  const tally = first.tally
+  if (!first.ambiguous || tally.up === tally.down) return first.figures
+  return (await scan(tally.up > tally.down ? 'up' : 'down')).figures
+
+  async function scan(prefer: 'up' | 'down' | null): Promise<{ figures: PaperFigure[]; tally: { up: number; down: number }; ambiguous: boolean }> {
+  const figures: PaperFigure[] = []
+  const seen = new Set<string>()
+  const tally = { up: 0, down: 0 }
+  let ambiguous = false
   for (let n = 1; n <= doc.numPages; n++) {
     const page = await doc.getPage(n)
     const vp = page.getViewport({ scale: 1 })
@@ -186,8 +201,10 @@ export async function extractFigures(doc: PDFDocumentProxy, onSkip?: (label: str
     // --- 1. Ink blobs, with prose erased ---------------------------------------
     const gw = Math.ceil(vp.width / CELL)
     const gh = Math.ceil(vp.height / CELL)
-    const ink = await inkGrid(page, gw, gh)
-    if (!ink) continue
+    if (!inks.has(n)) inks.set(n, await inkGrid(page, gw, gh))
+    const cached = inks.get(n)
+    if (!cached) continue
+    const ink = cached.slice()
     for (const l of lines) {
       if (!isProseSize(l)) continue
       const pad = l.h * 0.15
@@ -304,7 +321,10 @@ export async function extractFigures(doc: PDFDocumentProxy, onSkip?: (label: str
       const tableBox = (): Rect | null => {
         const down = tableRows('down')
         const up = tableRows('up')
-        const pick = down && up ? (down.lines >= up.lines ? down : up) : (down ?? up)
+        if (down && !up) tally.down++
+        if (up && !down) tally.up++
+        if (down && up) ambiguous = true
+        const pick = down && up ? (prefer ? (prefer === 'down' ? down : up) : down.lines >= up.lines ? down : up) : (down ?? up)
         if (!pick) return null
         const t = pick.r
         // Rules just around and among the rows.
@@ -350,21 +370,59 @@ export async function extractFigures(doc: PDFDocumentProxy, onSkip?: (label: str
       }
       got.forEach((i) => claimed.add(i))
       seen.add(c.label)
-      const pad = 2
-      const x0 = Math.max(0, r.x0 - pad)
-      const y0 = Math.max(0, r.y0 - pad)
-      figures.push({
-        label: c.label,
-        page: n,
-        x: x0 / vp.width,
-        y: y0 / vp.height,
-        width: (Math.min(vp.width, r.x1 + pad) - x0) / vp.width,
-        height: (Math.min(vp.height, r.y1 + pad) - y0) / vp.height,
-        caption: c.block.map((l) => l.text).join(' ').replace(/-\s(?=[a-z])/g, '')
-      })
+      const caption = c.block.map((l) => l.text).join(' ').replace(/-\s(?=[a-z])/g, '')
+      const toFigure = (label: string, b: Rect, text: string): PaperFigure => {
+        const pad = 2
+        const x0 = Math.max(0, b.x0 - pad)
+        const y0 = Math.max(0, b.y0 - pad)
+        return {
+          label,
+          page: n,
+          x: x0 / vp.width,
+          y: y0 / vp.height,
+          width: (Math.min(vp.width, b.x1 + pad) - x0) / vp.width,
+          height: (Math.min(vp.height, b.y1 + pad) - y0) / vp.height,
+          caption: text
+        }
+      }
+      const fig = toFigure(c.label, r, caption)
+
+      // Sub-figures: each "(a) …" label below the figure's blobs owns the
+      // blobs right above it (the nearest row of labels, the closest label
+      // horizontally), so "(a)" can be asked about on its own.
+      if (!c.table && got.length > 1) {
+        const area = r
+        const subs = lines.filter(
+          (l) => SUBCAPTION.test(l.text) && l.top >= area.y0 - 2 && l.bottom <= c.box.y0 + 1 && overlapX({ x0: l.x0, y0: 0, x1: l.x1, y1: 0 }, area.x0, area.x1) > 0
+        )
+        if (subs.length >= 2) {
+          const owner = new Map<Line, number[]>()
+          for (const i of got) {
+            const b = blobs[i]
+            const below = subs.filter((l) => l.top >= b.y1 - 6)
+            if (below.length === 0) continue
+            const rowTop = Math.min(...below.map((l) => l.top))
+            const row = below.filter((l) => l.top - rowTop < 6)
+            const cx = (b.x0 + b.x1) / 2
+            const best = row.reduce((a, l) => (Math.abs((l.x0 + l.x1) / 2 - cx) < Math.abs((a.x0 + a.x1) / 2 - cx) ? l : a))
+            owner.set(best, [...(owner.get(best) ?? []), i])
+          }
+          const parts = subs
+            .filter((l) => owner.has(l))
+            .map((l) => {
+              const box = boxOf(owner.get(l)!)!
+              const letter = l.text.match(SUBCAPTION)![1]
+              return toFigure(`${c.label}(${letter})`, box, `${l.text} — part of ${caption}`)
+            })
+            .filter((p) => p.width * vp.width > 20 && p.height * vp.height > 15)
+          if (parts.length >= 2) fig.parts = parts
+        }
+      }
+      figures.push(fig)
     }
   }
-  return figures
+  return { figures, tally, ambiguous }
+  }
 }
 
 /** Renders a page into a grid of CELL-point cells: 1 where anything is drawn. */

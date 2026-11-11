@@ -17,8 +17,11 @@ const { extractFigures } = await import('../src/renderer/src/figures.ts')
 const doc = await getDocument({ data: new Uint8Array(readFileSync(process.argv[2])), verbosity: 0 }).promise
 const t = Date.now()
 const figs = await extractFigures(doc as never, (label, page, why) => console.log(`  skip ${label} p.${page}: ${why}`))
+const line = (f: (typeof figs)[number], indent = ''): string =>
+  `${indent}${f.label.padEnd(12)} p.${String(f.page).padEnd(3)} x${f.x.toFixed(2)} y${f.y.toFixed(2)} w${f.width.toFixed(2)} h${f.height.toFixed(2)}  ${f.caption.slice(0, 60)}`
 for (const f of figs) {
-  console.log(`${f.label.padEnd(10)} p.${String(f.page).padEnd(3)} x${f.x.toFixed(2)} y${f.y.toFixed(2)} w${f.width.toFixed(2)} h${f.height.toFixed(2)}  ${f.caption.slice(0, 60)}`)
+  console.log(line(f))
+  for (const p of f.parts ?? []) console.log(line(p, '  '))
 }
 console.log(`${figs.length} figures in ${doc.numPages} pages, ${Date.now() - t} ms`)
 
@@ -28,7 +31,7 @@ if (pngAt > 0) {
   const { mkdirSync, writeFileSync } = await import('node:fs')
   const dir = process.argv[pngAt + 1]
   mkdirSync(dir, { recursive: true })
-  for (const f of figs) {
+  for (const f of figs.flatMap((f) => [f, ...(f.parts ?? [])])) {
     const page = await doc.getPage(f.page)
     const vp = page.getViewport({ scale: 1.5 })
     const canvas = createCanvas(Math.round(f.width * vp.width), Math.round(f.height * vp.height))
@@ -36,7 +39,7 @@ if (pngAt > 0) {
     ctx.fillStyle = '#fff'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
     await page.render({ canvasContext: ctx as never, viewport: vp, transform: [1, 0, 0, 1, -f.x * vp.width, -f.y * vp.height] }).promise
-    writeFileSync(`${dir}/${f.label.replace(' ', '')}.png`, canvas.toBuffer('image/png'))
+    writeFileSync(`${dir}/${f.label.replace(/[ ()]/g, '')}.png`, canvas.toBuffer('image/png'))
   }
   console.log(`crops saved to ${dir}`)
 }

@@ -1524,3 +1524,13 @@ body.eval-mode .sp-composer {
   opacity: 1;
   transform: translate(-50%, 0);
 }
+
+/* Sub-figures "(a)", "(b)" … sit on top of their whole figure. */
+.unstuck-overlay .figure-hit.sub {
+  z-index: 1;
+}
+
+.unstuck-overlay .figure-hit.sub:hover {
+  background: rgba(47, 111, 222, 0.07);
+  box-shadow: 0 0 0 1.5px rgba(47, 111, 222, 0.8);
+}

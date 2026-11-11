@@ -35,6 +35,7 @@ export interface SavedFigure {
   width: number
   height: number
   caption: string
+  parts?: SavedFigure[]
 }
 
 /** Keeps only well-formed figures (the renderer is trusted, but the file is user-visible). */
@@ -42,15 +43,20 @@ function cleanFigures(f: unknown): PaperMeta['figures'] | undefined {
   const o = f as { v?: unknown; items?: unknown }
   if (!o || typeof o.v !== 'number' || !Array.isArray(o.items)) return undefined
   const num = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n)
-  const items = o.items
-    .filter((it): it is SavedFigure => {
-      const x = it as SavedFigure
-      return typeof x?.label === 'string' && typeof x.caption === 'string' && num(x.page) &&
-        num(x.x) && num(x.y) && num(x.width) && num(x.height)
-    })
-    .slice(0, 500)
-    .map((x) => ({ label: x.label.slice(0, 40), page: x.page, x: x.x, y: x.y, width: x.width, height: x.height, caption: x.caption.slice(0, 2000) }))
-  return { v: o.v, items }
+  const clean = (list: unknown[], depth: number): SavedFigure[] =>
+    list
+      .filter((it): it is SavedFigure => {
+        const x = it as SavedFigure
+        return typeof x?.label === 'string' && typeof x.caption === 'string' && num(x.page) &&
+          num(x.x) && num(x.y) && num(x.width) && num(x.height)
+      })
+      .slice(0, 500)
+      .map((x) => ({
+        label: x.label.slice(0, 40), page: x.page, x: x.x, y: x.y, width: x.width, height: x.height, caption: x.caption.slice(0, 3000),
+        // Sub-figures, one level deep.
+        ...(depth === 0 && Array.isArray(x.parts) ? { parts: clean(x.parts, 1).slice(0, 26) } : {})
+      }))
+  return { v: o.v, items: clean(o.items, 0) }
 }
 
 const ID = /^[0-9a-f]{16}$/

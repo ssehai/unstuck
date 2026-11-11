@@ -374,12 +374,12 @@ let figures: PaperFigure[] = []
 /** Transparent click targets over each figure (in percent of the page). */
 function renderFigureBoxes(): void {
   clearOverlays(container, 'figures')
-  for (const f of figures) {
+  const place = (f: PaperFigure, sub: boolean): void => {
     const overlay = pageOverlay(container, f.page, 'figures')
-    if (!overlay) continue
+    if (!overlay) return
     const d = document.createElement('div')
-    d.className = 'figure-hit'
-    d.title = `${f.label} — 클릭해서 질문하기`
+    d.className = sub ? 'figure-hit sub' : 'figure-hit'
+    d.title = `${f.label} — 클릭해서 질문하기${sub ? '' : ' (빈 곳을 누르면 그림 전체)'}`
     placeBox(d, { page: f.page, left: f.x, top: f.y, width: f.width, height: f.height }, 0)
     // A drag that starts on a figure still selects text; only a click asks.
     let down: { x: number; y: number } | null = null
@@ -388,9 +388,16 @@ function renderFigureBoxes(): void {
       const moved = down ? Math.hypot(e.clientX - down.x, e.clientY - down.y) : 0
       down = null
       if (moved > 4 || e.detail > 1) return
+      e.stopPropagation() // a sub-figure's click is not also the whole figure's
       popup.commitFigure(f, e.metaKey || e.ctrlKey)
     })
     overlay.appendChild(d)
+  }
+  // The whole figure first, then its sub-figures on top: a click inside a
+  // sub-figure picks it; a click on the figure's empty space picks the whole.
+  for (const f of figures) {
+    place(f, false)
+    for (const p of f.parts ?? []) place(p, true)
   }
 }
 
