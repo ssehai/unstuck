@@ -45,6 +45,8 @@ Details are in the technical report.
 - Word-snapped selection that follows the printed glyphs, including equations with sub/superscripts
 - Trackpad pinch zoom, ⌘+ / ⌘− / ⌘0 (fit width)
 - Find in the paper (⌘F) and in the side panel (⌘⇧F)
+- **Several places at once**: hold ⌘ while selecting (or clicking a figure) to add more places; they are
+  numbered ①②… and asked about together, e.g. a term and its definition four pages later
 - **Figures are clickable**: figures and their captions are found when a paper is first opened; click one
   to ask about the whole figure (its image and caption are sent)
 
@@ -103,8 +105,8 @@ npm run build && npm start
 
 1. **Open a paper**: click *Open PDF* (⌘O) or drag a PDF onto the window. It is copied into the local
    library, so next time pick it from *Library* (⌘L).
-2. **Select** the passage you are stuck on (drag, or double-click a word). A **? 질문하기** button appears;
-   click it or press **Enter**.
+2. **Select** the passage you are stuck on (drag, double-click a word, or click a figure). A **? 질문하기**
+   button appears; click it or press **Enter**. Hold **⌘** to add more places and ask about them together.
 3. Read the answer in the side panel. Click an **evidence quote** or a `p.N` chip to jump to the source sentence.
 4. Ask a **follow-up** in the box at the bottom, or use **헷갈리기 쉬운 점** / **선행 개념**.
 5. When you understand it, press **이해했음 ✓**. A note is written and the passage gets a dot.
@@ -126,6 +128,7 @@ Multi-Agent Games* (MAPPO), [arXiv:2103.01955](https://arxiv.org/abs/2103.01955)
 |---|---|
 | Open PDF / Library | ⌘O / ⌘L |
 | Ask about the selection | Enter |
+| Add another place to the selection | ⌘ + drag / double-click / click a figure |
 | Clear selection, close bars | Esc |
 | Show / hide side panel | ⌘← / ⌘→ (or ⌘\\) |
 | Zoom in / out / fit width | ⌘= / ⌘− / ⌘0, or pinch |

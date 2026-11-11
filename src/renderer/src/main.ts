@@ -5,8 +5,8 @@ import { FindBar } from './findBar'
 import { PanelFind } from './panelFind'
 import { selectionBoxes } from './lineModel'
 import { clearOverlays, pageOverlay, placeBox, toPageBoxes } from './overlay'
-import { jumpTo } from './locate'
-import { getNotesStore, type StuckRecord } from './notes'
+import { findInPage, jumpTo } from './locate'
+import { anchorsOf, getNotesStore, type StuckRecord } from './notes'
 import { StuckPoints } from './stuckPoints'
 import { getLibrary, type PaperMeta } from './library'
 import { Reader } from './reader'
@@ -281,35 +281,38 @@ popup.onHide = () => {
 const openStuck = (rec: StuckRecord): void => {
   setPanel(true)
   shownRecordId = rec.id
-  if (rec.figure) {
-    const f = rec.figure
-    const locateFigure = (): void => {
-      scrollToFigure(f)
-      if (popup.cardOpen) popup.showFigureHighlight(f)
-    }
-    popup.openSaved({ text: rec.quote, pageStart: rec.page, pageEnd: rec.pageEnd }, locateFigure, (body) => {
-      cancelExplain?.()
-      cancelExplain = startConversation({ record: rec }, body, conversationDeps())
+  const anchors = anchorsOf(rec)
+  const figures = anchors.flatMap((a) => (a.figure ? [a.figure] : []))
+  // Highlights every place whose page is rendered (others light up when the reader gets there).
+  const highlightAll = (first: Range | null): void => {
+    if (!popup.cardOpen || popup.selection) return
+    const ranges = anchors.flatMap((a, i) => {
+      if (a.figure) return []
+      if (i === 0 && first?.startContainer.isConnected) return [first]
+      const pageEl = container.querySelector<HTMLElement>(`.page[data-page-number="${a.page}"]`)
+      const r = pageEl?.querySelector('.textLayer span') ? findInPage(pageEl, a.quote) : null
+      return r ? [r] : []
     })
-    locateFigure()
-    return
+    popup.showSaved(ranges, figures)
   }
-  // Go to the passage and show it highlighted, as when it was first selected.
+  // Go to the (first) place and show it highlighted, as when it was first selected.
   const locate = async (): Promise<void> => {
-    const range = await jumpTo(reader, container, rec.page, rec.quote, { flash: false })
-    if (!range || !popup.cardOpen) return
-    popup.showSavedHighlight(range)
+    const a = anchors[0]
+    let range: Range | null = null
+    if (a.figure) scrollToFigure(a.figure)
+    else range = await jumpTo(reader, container, a.page, a.quote, { flash: false })
+    highlightAll(range)
     // Right after a zoom the page may still be re-rendering; measure again
     // once it has, so the highlight hugs the glyphs exactly.
-    setTimeout(() => {
-      if (popup.cardOpen && !popup.selection && range.startContainer.isConnected) popup.showSavedHighlight(range)
-    }, 700)
+    setTimeout(() => highlightAll(range), 700)
   }
-  popup.openSaved({ text: rec.quote, pageStart: rec.page, pageEnd: rec.pageEnd }, () => void locate(), (body) => {
+  const text = anchors.length > 1 ? anchors.map((a, i) => `${'①②③④⑤⑥'[i] ?? ''} ${a.figure ? a.figure.label : a.quote}`).join('  ') : rec.quote
+  const pages = anchors.map((a) => a.page)
+  popup.openSaved({ text, pageStart: Math.min(...pages), pageEnd: Math.max(...anchors.map((a) => a.pageEnd)) }, () => void locate(), (body) => {
     cancelExplain?.()
     cancelExplain = startConversation({ record: rec }, body, conversationDeps())
   })
-  locate()
+  void locate()
 }
 const stuck = new StuckPoints({
   container,
@@ -384,7 +387,7 @@ function renderFigureBoxes(): void {
       const moved = down ? Math.hypot(e.clientX - down.x, e.clientY - down.y) : 0
       down = null
       if (moved > 4 || e.detail > 1) return
-      popup.commitFigure(f)
+      popup.commitFigure(f, e.metaKey || e.ctrlKey)
     })
     overlay.appendChild(d)
   }

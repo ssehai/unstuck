@@ -31,10 +31,12 @@ export interface PaperFigure {
 }
 
 /** Bump when detection changes, so saved figures are found again. */
-export const FIGURES_VERSION = 2
+export const FIGURES_VERSION = 3
 
 /** Points from the page top where content can start (page headers sit above). */
 const TOP_MARGIN = 24
+/** Points from the left/right page edges searched for a figure's ink. */
+const EDGE = 10
 
 const CAPTION = /^\s*(Figure|Fig\.)\s*(\d+)\s*[:.]/i
 
@@ -44,6 +46,8 @@ interface Line {
   x1: number
   top: number
   bottom: number
+  /** Font size. */
+  h: number
 }
 
 /** Text lines of a page, in PDF points with y growing downwards. */
@@ -76,7 +80,8 @@ async function pageLines(page: Awaited<ReturnType<PDFDocumentProxy['getPage']>>,
         x0: run[0].x,
         x1: Math.max(...run.map((p) => p.x + p.w)),
         top: l.y - l.h * 0.85,
-        bottom: l.y + l.h * 0.25
+        bottom: l.y + l.h * 0.25,
+        h: l.h
       })
       run = []
     }
@@ -98,6 +103,9 @@ function isBodyLine(l: Line, colW: number): boolean {
   return l.x1 - l.x0 > colW * 0.6 && l.text.length >= colW / 7 && !CAPTION.test(l.text)
 }
 
+/** "(a) SMAC": a sub-figure label, which belongs to the figure. */
+const SUBCAPTION = /^\(([a-z]|[ivx]{1,4}|\d{1,2})\)\s/i
+
 /** Finds the figures of a paper. Pages are rendered once at low resolution to trim regions to their ink. */
 export async function extractFigures(doc: PDFDocumentProxy, onSkip?: (label: string, page: number, why: string) => void): Promise<PaperFigure[]> {
   const figures: PaperFigure[] = []
@@ -115,6 +123,14 @@ export async function extractFigures(doc: PDFDocumentProxy, onSkip?: (label: str
     const left = Math.min(...long.map((l) => l.x0))
     const right = Math.max(...long.map((l) => l.x1))
     const mid = (left + right) / 2
+    // Body font size: the most common size among body-width lines.
+    const sizes = long.map((l) => Math.round(l.h * 2) / 2)
+    const bodySize = sizes.sort((a, b) => sizes.filter((v) => v === b).length - sizes.filter((v) => v === a).length)[0]
+    // Text set at body size or larger (body text, the last short line of a
+    // paragraph, headings) is never part of a figure; labels inside plots are
+    // smaller, and image-only figures have no text at all.
+    const isProse = (l: Line, colW: number): boolean =>
+      isBodyLine(l, colW) || (l.h >= bodySize * 0.92 && l.text.length >= 3 && !SUBCAPTION.test(l.text) && !CAPTION.test(l.text))
 
     const found: { label: string; caption: string; x0: number; x1: number; top: number; bottom: number }[] = []
     // Each caption's block: following lines close below it in the same column.
@@ -148,12 +164,16 @@ export async function extractFigures(doc: PDFDocumentProxy, onSkip?: (label: str
       const wide = b.x1 - b.x0 > (right - left) * 0.55 || (b.x0 < mid - 20 && b.x1 > mid + 20)
       const x0 = wide ? left : b.x0 < mid ? left : mid
       const x1 = wide ? right : b.x0 < mid ? mid : right
+      // Figures may be wider than the text: look for ink out to the page's
+      // edges on the outer side(s); the trim finds the real extent.
+      const inkX0 = wide || b.x0 < mid ? EDGE : mid
+      const inkX1 = wide || b.x0 >= mid ? vp.width - EDGE : mid
       const colW = x1 - x0
       // The figure ends upwards at the nearest body text or another figure's
       // caption above it in that column; else at the page's top margin (an
       // image-only figure has no text of its own). The ink trims it.
       const ceilings = [
-        ...lines.filter((l) => l.bottom <= cap.top + 1 && l.x0 < x1 && l.x1 > x0 && isBodyLine(l, colW)).map((l) => l.bottom),
+        ...lines.filter((l) => l.bottom <= cap.top + 1 && l.x0 < x1 && l.x1 > x0 && isProse(l, colW)).map((l) => l.bottom),
         ...blocks.filter((o) => o !== b && o.bottom <= cap.top + 1 && o.x0 < x1 && o.x1 > x0).map((o) => o.bottom)
       ]
       const top = ceilings.length ? Math.max(...ceilings) + 1 : TOP_MARGIN
@@ -164,8 +184,8 @@ export async function extractFigures(doc: PDFDocumentProxy, onSkip?: (label: str
       found.push({
         label,
         caption: b.lines.map((l) => l.text).join(' ').replace(/-\s(?=[a-z])/g, ''),
-        x0,
-        x1,
+        x0: inkX0,
+        x1: inkX1,
         top,
         bottom: cap.top - 1
       })

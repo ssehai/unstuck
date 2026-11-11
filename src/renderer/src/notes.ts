@@ -13,6 +13,19 @@ export interface StoredTurn {
   text: string
 }
 
+/** One place in the paper a stuck point refers to. */
+export interface Anchor {
+  page: number
+  pageEnd: number
+  quote: string
+  figure?: PaperFigure
+}
+
+/** The places a stuck point refers to (one, unless several were asked about together). */
+export function anchorsOf(r: StuckRecord): Anchor[] {
+  return r.parts?.length ? r.parts : [{ page: r.page, pageEnd: r.pageEnd, quote: r.quote, figure: r.figure }]
+}
+
 export interface StuckRecord {
   id: string
   paperId: string
@@ -26,6 +39,11 @@ export interface StuckRecord {
   image?: string
   /** Set when the stuck point is a whole figure (`quote` is then its caption). */
   figure?: PaperFigure
+  /**
+   * Several places asked about together (⌘-selection). The first is the one
+   * in page / pageEnd / quote / figure above.
+   */
+  parts?: Anchor[]
   sessionId?: string
   turns: StoredTurn[]
   status: 'open' | 'understood'

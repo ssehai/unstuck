@@ -8,12 +8,13 @@
  * revealed and the tool's citations are checked. Results are appended to
  * results.jsonl (or localStorage in a browser).
  */
-import { findCaptureRegion, looksMathy } from './capture'
+import { looksMathy } from './capture'
 import { explain, LlmError, type Streaming } from './llm'
 import { jumpTo } from './locate'
 import { renderMarkdown } from './markdown'
-import { baselineFigurePrompt, baselineSystemPrompt, baselineUserPrompt, figurePrompt, systemPrompt, userPrompt } from './prompt'
-import { paragraphAt } from './explainUi'
+import { baselineSystemPrompt, systemPrompt } from './prompt'
+import { base64Of, buildQuestion } from './question'
+import { paragraphAt, selectionAnchors } from './explainUi'
 import { checkQuote, formatPaper, isSent, needsAppendix, paperParagraphs, type Paragraph } from './paperText'
 import type { Reader } from './reader'
 import type { StuckSelection } from './selection'
@@ -160,32 +161,17 @@ export function startEvaluation(sel: StuckSelection, body: HTMLElement, deps: Ev
     if (!doc) return
     paras = await paperParagraphs(doc)
     if (cancelled) return
-    let image: string | undefined
-    const region = sel.figure ?? (sel.range && looksMathy(sel.text) ? findCaptureRegion(sel.range, deps.container) : null)
-    if (region) {
-      const img = await deps.reader.renderRegion(sel.figure ? sel.figure.page : (region as { page: number }).page, region, sel.figure ? 2.5 : 3)
-      if (img) {
-        image = img.dataUrl.replace(/^data:image\/png;base64,/, '')
-        imageSent = true
-      }
-    }
+    const anchors = selectionAnchors(sel)
+    const home = anchors.length === 1 ? paragraphAt(paras, sel.pageStart, sel.text) : null
+    const appendix = anchors.some((a) => needsAppendix(paras, a.page, a.quote, paragraphAt(paras, a.page, a.quote)?.text ?? ''))
+    const q = await buildQuestion(sel, deps.reader, deps.container, home, !!home && isSent(home, { appendix }))
     if (cancelled) return
-    const home = paragraphAt(paras, sel.pageStart, sel.text)
-    const appendix = needsAppendix(paras, sel.pageStart, sel.text, home?.text ?? '')
-    run('tool', {
-      system: systemPrompt(deps.title(), formatPaper(paras, { appendix })),
-      text: sel.figure
-        ? figurePrompt(sel.figure.label, sel.figure.caption, sel.figure.page)
-        : userPrompt(sel.text, sel.pageStart, home, !!home && isSent(home, { appendix })),
-      image
-    })
-    // For a figure, a chatbot user would paste a screenshot and the caption:
-    // the baseline gets the same image, so only the paper context differs.
-    run('baseline', {
-      system: baselineSystemPrompt(),
-      text: sel.figure ? baselineFigurePrompt(sel.figure.caption) : baselineUserPrompt(sel.text),
-      image: sel.figure ? image : undefined
-    })
+    const image = base64Of(q.imageUrl)
+    imageSent = !!image
+    run('tool', { system: systemPrompt(deps.title(), formatPaper(paras, { appendix })), text: q.text, image })
+    // The baseline gets what a chatbot user would paste (for a figure, the
+    // same screenshot), so only the paper context differs.
+    run('baseline', { system: baselineSystemPrompt(), text: q.baseline.text, image: q.baseline.withImage ? image : undefined })
   })()
 
   // --- Step 1: blind rating -------------------------------------------------------

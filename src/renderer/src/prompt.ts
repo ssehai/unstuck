@@ -55,6 +55,39 @@ export function figurePrompt(label: string, caption: string, page: number): stri
   ].join('\n')
 }
 
+/** One of several places asked about together. */
+export interface QuestionPart {
+  text: string
+  page: number
+  /** For a figure: its label; its caption is `text`. */
+  figure?: string
+}
+
+const describePart = (p: QuestionPart, i: number): string =>
+  p.figure ? `[${i + 1}] ${p.figure} (p.${p.page}), caption: "${p.text}"` : `[${i + 1}] (p.${p.page}) "${p.text}"`
+
+/**
+ * Several places selected together (⌘-selection). The student usually wants
+ * the connection: a term and its definition, an equation and its prose, a
+ * figure and the claim it supports.
+ */
+export function multiPrompt(parts: QuestionPart[], imageOf?: number): string {
+  return [
+    `The student selected ${parts.length} places in the paper and asks about them together:`,
+    ...parts.map(describePart),
+    imageOf !== undefined ? `The attached image shows [${imageOf + 1}].` : '',
+    '',
+    'Explain them together: say briefly what each one is, and above all how they relate in this paper. Refer to them as [1], [2], ….'
+  ]
+    .filter((l, i, a) => l !== '' || i === a.length - 2)
+    .join('\n')
+}
+
+/** Baseline for several places: what a chatbot user would paste, the passages one after another. */
+export function baselineMultiPrompt(parts: QuestionPart[]): string {
+  return `${parts.map(describePart).join('\n')}\n\nExplain these passages and how they relate.`
+}
+
 export type FollowUpKind = 'question' | 'confusions' | 'prerequisites'
 
 /** A follow-up turn in the same conversation as the first explanation. */

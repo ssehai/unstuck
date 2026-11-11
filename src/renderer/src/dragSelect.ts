@@ -12,11 +12,12 @@ import { before, wordAt, type Caret, type Hit } from './lineModel'
 export interface DragHandlers {
   /** Elements where a mousedown should keep its normal behaviour. */
   isIgnored: (target: Element) => boolean
-  onStart: () => void
+  /** `additive`: ⌘ (Ctrl) is held, so the selection adds to the current ones. */
+  onStart: (additive: boolean) => void
   /** Called continuously while dragging (for a live highlight). */
   onUpdate: (range: Range) => void
   /** Called on release; null means it was a plain click, not a selection. */
-  onEnd: (range: Range | null) => void
+  onEnd: (range: Range | null, additive: boolean) => void
 }
 
 const DRAG_THRESHOLD = 4 // px before a press becomes a drag
@@ -46,6 +47,7 @@ function cover(a: Hit, b: Hit): Range {
 }
 
 export function installDragSelect(container: HTMLElement, h: DragHandlers): void {
+  let additive = false
   let anchor: Hit | null = null
   let origin = { x: 0, y: 0 }
   let pointer = { x: 0, y: 0 }
@@ -90,7 +92,7 @@ export function installDragSelect(container: HTMLElement, h: DragHandlers): void
     pointer = { x: e.clientX, y: e.clientY }
     // A release far from the press is a drag even if no mousemove arrived.
     if (Math.hypot(pointer.x - origin.x, pointer.y - origin.y) >= DRAG_THRESHOLD) dragging = true
-    h.onEnd(dragging ? current() : null)
+    h.onEnd(dragging ? current() : null, additive)
     anchor = null
     dragging = false
   }
@@ -107,14 +109,15 @@ export function installDragSelect(container: HTMLElement, h: DragHandlers): void
 
     e.preventDefault() // we draw our own selection
     window.getSelection()?.removeAllRanges()
-    h.onStart()
+    additive = e.metaKey || e.ctrlKey
+    h.onStart(additive)
 
     const hit = wordAt(container, e.clientX, e.clientY)
     if (!hit) return
 
     // Double-click: select the word under the pointer.
     if (e.detail === 2) {
-      if (hit.side === 'inside') h.onEnd(cover(hit, hit))
+      if (hit.side === 'inside') h.onEnd(cover(hit, hit), additive)
       return
     }
 

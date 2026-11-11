@@ -1450,3 +1450,27 @@ body.eval-mode .sp-composer {
   background: rgba(255, 196, 0, 0.07);
   box-shadow: 0 0 0 2px rgba(232, 168, 0, 0.6);
 }
+
+/* Several places selected with ⌘: numbered badges and the count on the ask button. */
+.unstuck-overlay .sel-num {
+  position: absolute;
+  transform: translate(-60%, -60%);
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font: 700 10.5px/16px -apple-system, BlinkMacSystemFont, sans-serif;
+  text-align: center;
+  box-shadow: 0 1px 4px rgba(20, 20, 18, 0.25);
+  z-index: 2;
+}
+
+.unstuck-overlay .ask-btn .ask-n {
+  margin-left: 2px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  font-weight: 700;
+}

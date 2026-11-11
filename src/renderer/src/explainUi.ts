@@ -6,12 +6,12 @@
  *   → saved as a stuck point; "Got it" condenses it into a note (M4).
  * A saved stuck point can be reopened later and continued.
  */
-import { findCaptureRegion, looksMathy } from './capture'
 import { explain, LlmError, type Streaming } from './llm'
 import { jumpTo } from './locate'
 import { renderMarkdown } from './markdown'
-import type { NotesStore, StoredTurn, StuckRecord } from './notes'
-import { figurePrompt, followUpPrompt, NOTE_MODEL, NOTE_SYSTEM, notePrompt, systemPrompt, userPrompt, type FollowUpKind } from './prompt'
+import { anchorsOf, type Anchor, type NotesStore, type StoredTurn, type StuckRecord } from './notes'
+import { followUpPrompt, NOTE_MODEL, NOTE_SYSTEM, notePrompt, systemPrompt, type FollowUpKind } from './prompt'
+import { base64Of, buildQuestion } from './question'
 import { checkQuote, formatPaper, isSent, needsAppendix, normalizeForMatch, paperParagraphs, type Paragraph } from './paperText'
 import type { Reader } from './reader'
 import type { StuckSelection } from './selection'
@@ -268,9 +268,10 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
     // What to send: the paper without references, and the appendix only if
     // this passage needs it. Deterministic per passage, so a reopened stuck
     // point resumes with exactly the same prompt (and cache).
-    const quote = 'record' in src ? src.record.quote : src.sel.text
-    const home = paragraphAt(paras, page, quote)
-    const appendix = needsAppendix(paras, page, quote, home?.text ?? '')
+    const anchors = 'record' in src ? anchorsOf(src.record) : selectionAnchors(src.sel)
+    const quote = anchors[0].quote
+    const home = anchors.length === 1 ? paragraphAt(paras, page, quote) : null
+    const appendix = anchors.some((a) => needsAppendix(paras, a.page, a.quote, paragraphAt(paras, a.page, a.quote)?.text ?? ''))
     system = systemPrompt(deps.title(), formatPaper(paras, { appendix }))
 
     // Reopening a saved stuck point: replay it, then allow continuing.
@@ -291,24 +292,11 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
 
     // A new selection.
     const sel = (src as { sel: StuckSelection }).sel
-    let image: string | undefined
-    let imageUrl: string | undefined
-    // A figure is sent as an image of the whole figure; an equation as an
-    // image of its block (the extracted text of math is garbled).
-    const region = sel.figure ?? (sel.range && looksMathy(sel.text) ? findCaptureRegion(sel.range, deps.container) : null)
-    if (region) {
-      const img = await deps.reader.renderRegion(sel.figure ? sel.figure.page : (region as { page: number }).page, region, sel.figure ? 2.5 : 3)
-      if (cancelled) return
-      if (img) {
-        imageUrl = img.dataUrl
-        image = img.dataUrl.replace(/^data:image\/png;base64,/, '')
-        showImage(img.dataUrl)
-      }
-    }
-
-    const text = sel.figure
-      ? figurePrompt(sel.figure.label, sel.figure.caption, sel.figure.page)
-      : userPrompt(sel.text, sel.pageStart, home, !!home && isSent(home, { appendix }))
+    const q = await buildQuestion(sel, deps.reader, deps.container, home, !!home && isSent(home, { appendix }))
+    if (cancelled) return
+    const { text, imageUrl } = q
+    if (imageUrl) showImage(imageUrl)
+    const image = base64Of(imageUrl)
     const block = thinking('Reading the paper…')
     thread.appendChild(block)
     const reply = await stream1(block, text, image)
@@ -320,7 +308,7 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
     }
     // The first answer worked: this passage becomes a stuck point.
     const turns: StoredTurn[] = [
-      { role: 'user', display: sel.figure ? sel.figure.label : sel.text, text },
+      { role: 'user', display: sel.parts ? sel.text : sel.figure ? sel.figure.label : sel.text, text },
       { role: 'assistant', display: reply, text: reply }
     ]
     record = {
@@ -328,11 +316,13 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
       paperId,
       createdAt: Date.now(),
       updatedAt: Date.now(),
-      page: sel.pageStart,
-      pageEnd: sel.pageEnd,
-      quote: sel.text,
+      // The first place doubles as the record's own location (dot, jump).
+      page: anchors[0].page,
+      pageEnd: anchors[0].pageEnd,
+      quote: anchors[0].quote,
       image: imageUrl,
-      figure: sel.figure,
+      figure: anchors[0].figure,
+      parts: anchors.length > 1 ? anchors : undefined,
       sessionId: pendingSession,
       turns,
       status: 'open'
@@ -345,6 +335,11 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
     cancelled = true
     stream?.cancel()
   }
+}
+
+/** The places a new selection refers to: one, or each of several ⌘-selected ones. */
+export function selectionAnchors(sel: StuckSelection): Anchor[] {
+  return (sel.parts ?? [sel]).map((p) => ({ page: p.pageStart, pageEnd: p.pageEnd, quote: p.text, figure: p.figure }))
 }
 
 /** The paragraph that contains a passage (for extra context in the prompt). */

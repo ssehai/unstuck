@@ -7,7 +7,7 @@ import { selectionBoxes } from './lineModel'
 import { findInPage } from './locate'
 import { renderMarkdown } from './markdown'
 import { clearOverlays, pageOverlay, toPageBoxes } from './overlay'
-import type { NotesStore, StuckRecord } from './notes'
+import { anchorsOf, type NotesStore, type StuckRecord } from './notes'
 
 interface Deps {
   container: HTMLElement
@@ -28,6 +28,9 @@ interface Spot {
   /** Page height / width, to make the dot round in percent units. */
   aspect: number
 }
+
+/** Spots are per place: a stuck point asked about several places has a dot at each. */
+const spotKey = (rec: StuckRecord, i: number): string => `${rec.id}#${i}`
 
 /** Dot diameter relative to the passage's line height. */
 const DOT_OF_LINE = 0.6
@@ -71,7 +74,7 @@ export class StuckPoints {
     if (!this.paperId) return
     await this.deps.store.remove(this.paperId, rec.id)
     this.records = this.records.filter((r) => r.id !== rec.id)
-    this.spots.delete(rec.id)
+    for (const k of [...this.spots.keys()]) if (k.startsWith(`${rec.id}#`)) this.spots.delete(k)
     this.renderList()
     this.renderMarkers()
     this.deps.onDeleted?.(rec)
@@ -144,7 +147,9 @@ export class StuckPoints {
         const t = li.querySelector<HTMLElement>('.si-title')!
         if (title) t.innerHTML = renderMarkdown(title).replace(/^<p>|<\/p>$/g, '')
         else t.remove()
-        li.querySelector<HTMLElement>('.si-quote')!.textContent = `“${rec.quote.length > 110 ? rec.quote.slice(0, 109) + '…' : rec.quote}”`
+        const more = anchorsOf(rec).length - 1
+        li.querySelector<HTMLElement>('.si-quote')!.textContent =
+          `“${rec.quote.length > 110 ? rec.quote.slice(0, 109) + '…' : rec.quote}”` + (more ? ` 외 ${more}곳` : '')
         li.querySelector('.si-open')!.addEventListener('click', () => this.deps.open(rec))
         li.querySelector('.si-remove')!.addEventListener('click', (e) => {
           e.stopPropagation()
@@ -164,31 +169,36 @@ export class StuckPoints {
   renderMarkers(): void {
     const c = this.deps.container
     for (const rec of this.records) {
-      if (this.spots.has(rec.id)) continue
-      const pageEl = c.querySelector<HTMLElement>(`.page[data-page-number="${rec.page}"]`)
-      if (rec.figure && pageEl) {
-        // A figure's dot sits at the figure's top-left corner, sized like a body line.
-        const f = rec.figure
-        this.spots.set(rec.id, { page: f.page, top: f.y, bottom: f.y + 0.0125, left: f.x, aspect: pageEl.clientHeight / pageEl.clientWidth })
-        continue
-      }
-      if (!pageEl?.querySelector('.textLayer span')) continue
-      const range = findInPage(pageEl, rec.quote)
-      if (!range) continue
-      const boxes = toPageBoxes(selectionBoxes(range, c), c).filter((b) => b.page === rec.page)
-      if (boxes.length === 0) continue
-      this.spots.set(rec.id, {
-        page: rec.page,
-        top: boxes[0].top,
-        bottom: boxes[0].top + boxes[0].height,
-        left: Math.min(...boxes.map((b) => b.left)),
-        aspect: pageEl.clientHeight / pageEl.clientWidth
+      anchorsOf(rec).forEach((a, i) => {
+        const key = spotKey(rec, i)
+        if (this.spots.has(key)) return
+        const pageEl = c.querySelector<HTMLElement>(`.page[data-page-number="${a.page}"]`)
+        if (!pageEl) return
+        const aspect = pageEl.clientHeight / pageEl.clientWidth
+        if (a.figure) {
+          // A figure's dot sits at the figure's top-left corner, sized like a body line.
+          const f = a.figure
+          this.spots.set(key, { page: f.page, top: f.y, bottom: f.y + 0.0125, left: f.x, aspect })
+          return
+        }
+        if (!pageEl.querySelector('.textLayer span')) return
+        const range = findInPage(pageEl, a.quote)
+        if (!range) return
+        const boxes = toPageBoxes(selectionBoxes(range, c), c).filter((b) => b.page === a.page)
+        if (boxes.length === 0) return
+        this.spots.set(key, {
+          page: a.page,
+          top: boxes[0].top,
+          bottom: boxes[0].top + boxes[0].height,
+          left: Math.min(...boxes.map((b) => b.left)),
+          aspect
+        })
       })
     }
 
     clearOverlays(c, 'markers')
-    for (const rec of this.records) {
-      const s = this.spots.get(rec.id)
+    for (const rec of this.records) for (let i = 0; i < anchorsOf(rec).length; i++) {
+      const s = this.spots.get(spotKey(rec, i))
       const overlay = s && pageOverlay(c, s.page, 'markers')
       if (!s || !overlay) continue
       const m = document.createElement('button')
