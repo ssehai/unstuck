@@ -17,6 +17,14 @@ export interface StuckSelection {
   parts?: StuckSelection[]
 }
 
+/** What the panel card shows for a passage (several `places` when asked together). */
+export interface SavedInfo {
+  text: string
+  pageStart: number
+  pageEnd: number
+  places?: string[]
+}
+
 const MIN_CHARS = 2
 const MAX_PARTS = 6
 const NUMBERS = '①②③④⑤⑥'
@@ -209,7 +217,7 @@ export class SelectionPopup {
       items.length === 1
         ? items[0].sel
         : {
-            text: items.map((p, i) => `${NUMBERS[i]} ${p.sel.figure ? p.sel.figure.label : p.sel.text}`).join('  '),
+            text: items.map((p, i) => `${NUMBERS[i]} ${placeLabel(p.sel)}`).join('  '),
             pageStart: Math.min(...items.map((p) => p.sel.pageStart)),
             pageEnd: Math.max(...items.map((p) => p.sel.pageEnd)),
             range: items[0].sel.range,
@@ -219,14 +227,14 @@ export class SelectionPopup {
     this.hl = items.flatMap((p) => p.marks)
     this.renderHighlights()
     this.locate = () => this.scrollToSelection()
-    this.render(sel, (body) => this.onSelect?.(sel, body))
+    this.render({ ...sel, places: sel.parts?.map(placeLabel) }, (body) => this.onSelect?.(sel, body))
   }
 
   /**
    * Shows a saved stuck point in the panel (no live selection). `locate`
    * brings its passage into view; `fill` receives the card body.
    */
-  openSaved(info: { text: string; pageStart: number; pageEnd: number }, locate: () => void, fill: (body: HTMLElement) => void): void {
+  openSaved(info: SavedInfo, locate: () => void, fill: (body: HTMLElement) => void): void {
     if (!this.card.hidden) this.onHide?.()
     this.clearPending()
     this.current = null
@@ -236,7 +244,7 @@ export class SelectionPopup {
     this.render(info, fill)
   }
 
-  private render(s: { text: string; pageStart: number; pageEnd: number }, fill: (body: HTMLElement) => void): void {
+  private render(s: SavedInfo, fill: (body: HTMLElement) => void): void {
     const pages = s.pageStart === s.pageEnd ? `p.${s.pageStart}` : `pp.${s.pageStart}–${s.pageEnd}`
     this.card.innerHTML = `
       <div class="sp-head">
@@ -245,7 +253,18 @@ export class SelectionPopup {
       </div>
       <blockquote class="sp-quote"></blockquote>
       <div class="sp-body"></div>`
-    this.card.querySelector('.sp-quote')!.textContent = truncate(s.text, 280)
+    const quote = this.card.querySelector('.sp-quote')!
+    if (s.places && s.places.length > 1) {
+      // Several places: a numbered list, one place per line.
+      const ol = document.createElement('ol')
+      ol.className = 'sp-places'
+      for (const t of s.places) {
+        const li = document.createElement('li')
+        li.textContent = truncate(t, 160)
+        ol.appendChild(li)
+      }
+      quote.appendChild(ol)
+    } else quote.textContent = truncate(s.text, 280)
     this.card.querySelector('.sp-close')!.addEventListener('click', () => this.hide())
     this.card.querySelector('.sp-tag')!.addEventListener('click', () => this.locate())
 
@@ -274,7 +293,7 @@ export class SelectionPopup {
         if (!overlay) return
         const d = document.createElement('div')
         d.className = m.figure ? 'figure-hl pending' : 'stuck-hl pending'
-        placeBox(d, m.box, m.figure ? 3 : 1)
+        placeBox(d, m.box, m.figure ? 0 : 1)
         overlay.appendChild(d)
         if (many && j === 0) overlay.appendChild(numberBadge(i, m.box))
       })
@@ -314,10 +333,15 @@ export class SelectionPopup {
       if (!overlay) continue
       const d = document.createElement('div')
       d.className = m.figure ? 'figure-hl' : 'stuck-hl'
-      placeBox(d, m.box, m.figure ? 3 : 1) // a hair of breathing room around the glyphs
+      placeBox(d, m.box, m.figure ? 0 : 1) // a hair of breathing room around the glyphs
       overlay.appendChild(d)
     }
   }
+}
+
+/** What the card shows for a place: a figure by its label, text as selected. */
+function placeLabel(s: StuckSelection): string {
+  return s.figure ? s.figure.label : s.text
 }
 
 /** ①②… at the top-left of a selection, when several are pending. */

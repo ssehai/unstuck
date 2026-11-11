@@ -1474,3 +1474,23 @@ body.eval-mode .sp-composer {
   background: rgba(255, 255, 255, 0.22);
   font-weight: 700;
 }
+
+/* Several places asked together: one per line, numbered like their badges. */
+.sp-quote .sp-places {
+  margin: 0;
+  padding-left: 1.5em;
+}
+
+.sp-quote .sp-places li {
+  margin: 0 0 3px;
+  padding-left: 2px;
+}
+
+.sp-quote .sp-places li:last-child {
+  margin-bottom: 0;
+}
+
+.sp-quote .sp-places li::marker {
+  color: var(--accent);
+  font-weight: 700;
+}

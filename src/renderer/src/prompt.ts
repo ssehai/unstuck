@@ -63,8 +63,10 @@ export interface QuestionPart {
   figure?: string
 }
 
+const CIRCLED = '①②③④⑤⑥⑦⑧⑨'
+
 const describePart = (p: QuestionPart, i: number): string =>
-  p.figure ? `[${i + 1}] ${p.figure} (p.${p.page}), caption: "${p.text}"` : `[${i + 1}] (p.${p.page}) "${p.text}"`
+  p.figure ? `${CIRCLED[i]} ${p.figure} (p.${p.page}), caption: "${p.text}"` : `${CIRCLED[i]} (p.${p.page}) "${p.text}"`
 
 /**
  * Several places selected together (⌘-selection). The student usually wants
@@ -75,9 +77,9 @@ export function multiPrompt(parts: QuestionPart[], imageOf?: number): string {
   return [
     `The student selected ${parts.length} places in the paper and asks about them together:`,
     ...parts.map(describePart),
-    imageOf !== undefined ? `The attached image shows [${imageOf + 1}].` : '',
+    imageOf !== undefined ? `The attached image shows ${CIRCLED[imageOf]}.` : '',
     '',
-    'Explain them together: say briefly what each one is, and above all how they relate in this paper. Refer to them as [1], [2], ….'
+    `Explain them together: say briefly what each one is, and above all how they relate in this paper. Refer to them as ${CIRCLED.slice(0, parts.length).split('').join(', ')} (these circled numbers, not [1], [2]).`
   ]
     .filter((l, i, a) => l !== '' || i === a.length - 2)
     .join('\n')

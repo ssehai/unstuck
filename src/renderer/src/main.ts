@@ -308,7 +308,8 @@ const openStuck = (rec: StuckRecord): void => {
   }
   const text = anchors.length > 1 ? anchors.map((a, i) => `${'①②③④⑤⑥'[i] ?? ''} ${a.figure ? a.figure.label : a.quote}`).join('  ') : rec.quote
   const pages = anchors.map((a) => a.page)
-  popup.openSaved({ text, pageStart: Math.min(...pages), pageEnd: Math.max(...anchors.map((a) => a.pageEnd)) }, () => void locate(), (body) => {
+  const places = anchors.length > 1 ? anchors.map((a) => (a.figure ? a.figure.label : a.quote)) : undefined
+  popup.openSaved({ text, places, pageStart: Math.min(...pages), pageEnd: Math.max(...anchors.map((a) => a.pageEnd)) }, () => void locate(), (body) => {
     cancelExplain?.()
     cancelExplain = startConversation({ record: rec }, body, conversationDeps())
   })
@@ -379,7 +380,7 @@ function renderFigureBoxes(): void {
     const d = document.createElement('div')
     d.className = 'figure-hit'
     d.title = `${f.label} — 클릭해서 질문하기`
-    placeBox(d, { page: f.page, left: f.x, top: f.y, width: f.width, height: f.height }, 3)
+    placeBox(d, { page: f.page, left: f.x, top: f.y, width: f.width, height: f.height }, 0)
     // A drag that starts on a figure still selects text; only a click asks.
     let down: { x: number; y: number } | null = null
     d.addEventListener('mousedown', (e) => (down = { x: e.clientX, y: e.clientY }))

@@ -31,7 +31,7 @@ export interface PaperFigure {
 }
 
 /** Bump when detection changes, so saved figures are found again. */
-export const FIGURES_VERSION = 3
+export const FIGURES_VERSION = 4
 
 /** Points from the page top where content can start (page headers sit above). */
 const TOP_MARGIN = 24
@@ -211,9 +211,11 @@ export async function extractFigures(doc: PDFDocumentProxy, onSkip?: (label: str
       }
       const pad = 3 * scale
       const bx0 = Math.max(0, ink.x0 - pad) / scale
-      const by0 = Math.max(0, ink.y0 - pad) / scale
+      // The margin never reaches past the text around the figure (a heading
+      // right above it, or the caption below).
+      const by0 = Math.max(f.top * scale, ink.y0 - pad) / scale
       const bx1 = Math.min(canvas.width, ink.x1 + pad) / scale
-      const by1 = Math.min(canvas.height, ink.y1 + pad) / scale
+      const by1 = Math.min(f.bottom * scale, ink.y1 + pad) / scale
       if (by1 - by0 < 20 || bx1 - bx0 < 20) {
         onSkip?.(f.label, n, 'too small')
         continue
