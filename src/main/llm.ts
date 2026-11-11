@@ -46,7 +46,8 @@ type ContentBlock =
   | { type: 'text'; text: string }
   | { type: 'image'; source: { type: 'base64'; media_type: 'image/png'; data: string } }
 
-const MAX_IMAGES = 8
+/** Matches the 10 places that can be selected together (renderer: selection.ts). */
+const MAX_IMAGES = 10
 
 function userContent(req: ExplainRequest): ContentBlock[] {
   const content: ContentBlock[] = []

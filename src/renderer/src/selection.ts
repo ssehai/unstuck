@@ -26,8 +26,9 @@ export interface SavedInfo {
 }
 
 const MIN_CHARS = 2
-const MAX_PARTS = 6
-const NUMBERS = '①②③④⑤⑥'
+/** Places that can be asked about together (each figure or equation among them is one image). */
+export const MAX_PARTS = 10
+export const NUMBERS = '①②③④⑤⑥⑦⑧⑨⑩'
 
 /** A highlight box; figures are outlined, text is marked. */
 interface Mark {
@@ -202,6 +203,7 @@ export class SelectionPopup {
       const same = this.pending.findIndex((q) => q.sel.text === p.sel.text && q.sel.pageStart === p.sel.pageStart)
       if (same >= 0) this.pending.splice(same, 1)
       else if (this.pending.length < MAX_PARTS) this.pending.push(p)
+      else showToast(`최대 ${MAX_PARTS}개까지만 선택할 수 있어요`)
     }
     this.renderPending()
   }
@@ -342,6 +344,24 @@ export class SelectionPopup {
 /** What the card shows for a place: a figure by its label, text as selected. */
 function placeLabel(s: StuckSelection): string {
   return s.figure ? s.figure.label : s.text
+}
+
+/** A short red notice at the bottom of the window. */
+let toastTimer = 0
+function showToast(message: string): void {
+  let t = document.querySelector<HTMLElement>('.limit-toast')
+  if (!t) {
+    t = document.createElement('div')
+    t.className = 'limit-toast'
+    t.setAttribute('role', 'alert')
+    document.body.appendChild(t)
+  }
+  t.textContent = message
+  t.classList.remove('show')
+  void t.offsetWidth // restart the animation when it is already showing
+  t.classList.add('show')
+  clearTimeout(toastTimer)
+  toastTimer = window.setTimeout(() => t!.classList.remove('show'), 2200)
 }
 
 /** ①②… at the top-left of a selection, when several are pending. */

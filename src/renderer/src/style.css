@@ -1501,3 +1501,26 @@ body.eval-mode .sp-composer {
   padding-top: 8px;
   border-top: 1px dashed var(--border);
 }
+
+/* "At most 10 places" notice when ⌘-selecting more. */
+.limit-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translate(-50%, 12px);
+  padding: 9px 16px;
+  border-radius: 10px;
+  background: #d93a2f;
+  color: #fff;
+  font: 600 13px -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', sans-serif;
+  box-shadow: 0 6px 20px rgba(140, 20, 10, 0.3);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  z-index: 1000;
+}
+
+.limit-toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}

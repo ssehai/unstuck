@@ -63,7 +63,7 @@ export interface QuestionPart {
   figure?: string
 }
 
-const CIRCLED = '①②③④⑤⑥⑦⑧⑨'
+const CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩'
 
 const describePart = (p: QuestionPart, i: number): string =>
   p.figure ? `${CIRCLED[i]} ${p.figure} (p.${p.page}), caption: "${p.text}"` : `${CIRCLED[i]} (p.${p.page}) "${p.text}"`

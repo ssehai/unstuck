@@ -10,7 +10,7 @@ import { anchorsOf, getNotesStore, type StuckRecord } from './notes'
 import { StuckPoints } from './stuckPoints'
 import { getLibrary, type PaperMeta } from './library'
 import { Reader } from './reader'
-import { SelectionPopup } from './selection'
+import { NUMBERS, SelectionPopup } from './selection'
 import { extractFigures, FIGURES_VERSION, type PaperFigure } from './figures'
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T
@@ -306,7 +306,7 @@ const openStuck = (rec: StuckRecord): void => {
     // once it has, so the highlight hugs the glyphs exactly.
     setTimeout(() => highlightAll(range), 700)
   }
-  const text = anchors.length > 1 ? anchors.map((a, i) => `${'①②③④⑤⑥'[i] ?? ''} ${a.figure ? a.figure.label : a.quote}`).join('  ') : rec.quote
+  const text = anchors.length > 1 ? anchors.map((a, i) => `${NUMBERS[i] ?? ''} ${a.figure ? a.figure.label : a.quote}`).join('  ') : rec.quote
   const pages = anchors.map((a) => a.page)
   const places = anchors.length > 1 ? anchors.map((a) => (a.figure ? a.figure.label : a.quote)) : undefined
   popup.openSaved({ text, places, pageStart: Math.min(...pages), pageEnd: Math.max(...anchors.map((a) => a.pageEnd)) }, () => void locate(), (body) => {
