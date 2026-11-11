@@ -38,7 +38,7 @@ export interface PaperFigure {
 }
 
 /** Bump when detection changes, so saved figures are found again. */
-export const FIGURES_VERSION = 9
+export const FIGURES_VERSION = 10
 
 /**
  * A caption's first line: a kind, a number ("3", "S1", "A.2", "3a", "IV"),
@@ -410,12 +410,24 @@ export async function extractFigures(doc: PDFDocumentProxy, onSkip?: (label: str
           const parts = subs
             .filter((l) => owner.has(l))
             .map((l) => {
-              const box = boxOf(owner.get(l)!)!
+              // A sub-figure includes its "(a) …" label.
+              const blobBox = boxOf(owner.get(l)!)!
+              const box = { x0: Math.min(blobBox.x0, l.x0), y0: blobBox.y0, x1: Math.max(blobBox.x1, l.x1), y1: Math.max(blobBox.y1, l.bottom) }
               const letter = l.text.match(SUBCAPTION)![1]
               return toFigure(`${c.label}(${letter})`, box, `${l.text} — part of ${caption}`)
             })
             .filter((p) => p.width * vp.width > 20 && p.height * vp.height > 15)
-          if (parts.length >= 2) fig.parts = parts
+          if (parts.length >= 2) {
+            fig.parts = parts
+            // The whole figure then includes every sub-figure label, the last row's too.
+            const all = [r, ...subs.filter((l) => owner.has(l)).map((l) => ({ x0: l.x0, y0: l.top, x1: l.x1, y1: l.bottom }))]
+            Object.assign(fig, toFigure(c.label, {
+              x0: Math.min(...all.map((b) => b.x0)),
+              y0: Math.min(...all.map((b) => b.y0)),
+              x1: Math.max(...all.map((b) => b.x1)),
+              y1: Math.max(...all.map((b) => b.y1))
+            }, caption), { parts })
+          }
         }
       }
       figures.push(fig)
