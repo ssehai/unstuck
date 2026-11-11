@@ -22,6 +22,8 @@ export interface ReaderEvents {
   onScaleChange?: (scale: number) => void
   onDocumentLoaded?: (doc: PDFDocumentProxy) => void
   onTextLayer?: (page: number) => void
+  /** A page's canvas finished drawing (ink-aligned geometry is measurable now). */
+  onPageRendered?: (page: number) => void
 }
 
 /** Thin wrapper around pdf.js's PDFViewer: scrolling, text layer, zoom. */
@@ -54,6 +56,29 @@ export class Reader {
     })
     this.linkService.setViewer(this.viewer)
 
+    // Search scrolls vertically only, at the current zoom: pdf.js would also
+    // scroll sideways (match ~400px from the left edge). Keep the horizontal
+    // position unless the match would be out of view, and put the match a
+    // third of the way down instead of at the very top (under the find bar).
+    const scrollMatch = this.finder.scrollMatchIntoView.bind(this.finder)
+    this.finder.scrollMatchIntoView = (args: Parameters<typeof scrollMatch>[0]): void => {
+      const finder = this.finder as unknown as { _scrollMatches: boolean }
+      const pending = finder._scrollMatches
+      const before = container.scrollLeft
+      scrollMatch(args)
+      // pdf.js calls this for every text-layer update; it scrolls (and clears
+      // _scrollMatches) only for the newly selected match.
+      if (!pending || finder._scrollMatches) return
+      const el = args?.element as HTMLElement | null | undefined
+      if (!el?.isConnected) return
+      const c = container.getBoundingClientRect()
+      container.scrollLeft = before
+      // The element is the whole text run; the match itself is its marked part.
+      const r = (el.querySelector('.highlight.selected') ?? el).getBoundingClientRect()
+      if (r.left < c.left || r.right > c.right) container.scrollLeft += r.left - c.left - c.width / 3
+      container.scrollTop += r.top - c.top - c.height / 3
+    }
+
     this.eventBus.on('pagesinit', () => {
       const v = this.pendingView
       this.pendingView = null
@@ -63,7 +88,10 @@ export class Reader {
     this.eventBus.on('pagechanging', (e: { pageNumber: number }) => {
       events.onPageChange?.(e.pageNumber, this.doc?.numPages ?? 0)
     })
-    const reportCount = (e: { matchesCount?: { current: number; total: number } }): void => {
+    const reportCount = (e: { state?: number; matchesCount?: { current: number; total: number } }): void => {
+      // While pdf.js is still extracting text (state PENDING = 3) the count
+      // is 0; don't report that as "no matches".
+      if (e.state === 3 && !e.matchesCount?.total) return
       if (e.matchesCount) this.onFindCount?.(e.matchesCount.current, e.matchesCount.total)
     }
     this.eventBus.on('updatefindmatchescount', reportCount)
@@ -71,6 +99,9 @@ export class Reader {
     this.eventBus.on('updatetextlayermatches', () => this.onFindMatches?.())
     this.eventBus.on('textlayerrendered', (e: { pageNumber: number }) => {
       events.onTextLayer?.(e.pageNumber)
+    })
+    this.eventBus.on('pagerendered', (e: { pageNumber: number }) => {
+      events.onPageRendered?.(e.pageNumber)
     })
     this.eventBus.on('scalechanging', (e: { scale: number }) => {
       events.onScaleChange?.(e.scale)

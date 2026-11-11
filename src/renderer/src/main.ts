@@ -152,19 +152,30 @@ function drawFindMarks(): void {
   findFrame = requestAnimationFrame(() => {
     clearOverlays(container, 'find')
     if (!pdfFind.isOpen) return
+    // A match spanning several text runs is marked begin / middle… / end:
+    // join them so the match is one mark, not one box per word.
+    const matches: HTMLElement[][] = []
     for (const el of container.querySelectorAll<HTMLElement>('.textLayer .highlight')) {
+      const cont = el.classList.contains('middle') || el.classList.contains('end')
+      if (cont && matches.length) matches[matches.length - 1].push(el)
+      else matches.push([el])
+    }
+    for (const els of matches) {
       const texts: Text[] = []
-      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
-      for (let n = walker.nextNode(); n; n = walker.nextNode()) texts.push(n as Text)
+      for (const el of els) {
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) texts.push(n as Text)
+      }
       if (texts.length === 0) continue
       const range = document.createRange()
       range.setStart(texts[0], 0)
       range.setEnd(texts[texts.length - 1], texts[texts.length - 1].length)
+      const current = els[0].classList.contains('selected')
       for (const b of toPageBoxes(selectionBoxes(range, container), container)) {
         const overlay = pageOverlay(container, b.page, 'find')
         if (!overlay) continue
         const d = document.createElement('div')
-        d.className = 'find-hl' + (el.classList.contains('selected') ? ' current' : '')
+        d.className = 'find-hl' + (current ? ' current' : '')
         placeBox(d, b, 1)
         overlay.appendChild(d)
       }
@@ -310,6 +321,11 @@ const reader = new Reader(container, $<HTMLDivElement>('viewer'), {
   onTextLayer: () => {
     popup.refreshHighlight()
     stuck.renderMarkers()
+    if (pdfFind.isOpen) drawFindMarks()
+  },
+  // Find marks measure the drawn glyphs; a page drawn after its text layer
+  // (e.g. after zooming) needs them measured again.
+  onPageRendered: () => {
     if (pdfFind.isOpen) drawFindMarks()
   }
 })
