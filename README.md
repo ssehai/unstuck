@@ -45,6 +45,8 @@ Details are in the technical report.
 - Word-snapped selection that follows the printed glyphs, including equations with sub/superscripts
 - Trackpad pinch zoom, ⌘+ / ⌘− / ⌘0 (fit width)
 - Find in the paper (⌘F) and in the side panel (⌘⇧F)
+- **Figures are clickable**: figures and their captions are found when a paper is first opened; click one
+  to ask about the whole figure (its image and caption are sent)
 
 **Explaining (LLM)**
 - Explanation / example / evidence for the selected passage, streamed as it is generated
@@ -167,6 +169,9 @@ The paper's text and your selection are sent to Claude (Anthropic) to generate a
 ```bash
 # Explain a passage from the terminal with exactly the app's prompt
 npm run try -- paper.pdf 4 "AS and FP"
+
+# Figures the app detects in a paper (optionally save the crops to check them)
+node --no-warnings scripts/figures-check.mts paper.pdf --png crops/
 
 # Summarise evaluation-mode results (and re-check evidence against the PDF)
 node --no-warnings scripts/eval-report.mts --paper paper.pdf --csv results.csv

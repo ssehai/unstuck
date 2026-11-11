@@ -11,7 +11,7 @@ import { explain, LlmError, type Streaming } from './llm'
 import { jumpTo } from './locate'
 import { renderMarkdown } from './markdown'
 import type { NotesStore, StoredTurn, StuckRecord } from './notes'
-import { followUpPrompt, NOTE_MODEL, NOTE_SYSTEM, notePrompt, systemPrompt, userPrompt, type FollowUpKind } from './prompt'
+import { figurePrompt, followUpPrompt, NOTE_MODEL, NOTE_SYSTEM, notePrompt, systemPrompt, userPrompt, type FollowUpKind } from './prompt'
 import { checkQuote, formatPaper, isSent, needsAppendix, normalizeForMatch, paperParagraphs, type Paragraph } from './paperText'
 import type { Reader } from './reader'
 import type { StuckSelection } from './selection'
@@ -257,7 +257,7 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
   })
 
   const showImage = (dataUrl: string): void => {
-    slot.innerHTML = `<figure class="sp-capture"><img alt="Captured equation" src="${dataUrl}"><figcaption>Sent with your question</figcaption></figure>`
+    slot.innerHTML = `<figure class="sp-capture"><img alt="Image sent with the question" src="${dataUrl}"><figcaption>Sent with your question</figcaption></figure>`
   }
 
   ;(async () => {
@@ -293,9 +293,11 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
     const sel = (src as { sel: StuckSelection }).sel
     let image: string | undefined
     let imageUrl: string | undefined
-    if (looksMathy(sel.text)) {
-      const region = findCaptureRegion(sel.range, deps.container)
-      const img = region ? await deps.reader.renderRegion(region.page, region) : null
+    // A figure is sent as an image of the whole figure; an equation as an
+    // image of its block (the extracted text of math is garbled).
+    const region = sel.figure ?? (sel.range && looksMathy(sel.text) ? findCaptureRegion(sel.range, deps.container) : null)
+    if (region) {
+      const img = await deps.reader.renderRegion(sel.figure ? sel.figure.page : (region as { page: number }).page, region, sel.figure ? 2.5 : 3)
       if (cancelled) return
       if (img) {
         imageUrl = img.dataUrl
@@ -304,7 +306,9 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
       }
     }
 
-    const text = userPrompt(sel.text, sel.pageStart, home, !!home && isSent(home, { appendix }))
+    const text = sel.figure
+      ? figurePrompt(sel.figure.label, sel.figure.caption, sel.figure.page)
+      : userPrompt(sel.text, sel.pageStart, home, !!home && isSent(home, { appendix }))
     const block = thinking('Reading the paper…')
     thread.appendChild(block)
     const reply = await stream1(block, text, image)
@@ -316,7 +320,7 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
     }
     // The first answer worked: this passage becomes a stuck point.
     const turns: StoredTurn[] = [
-      { role: 'user', display: sel.text, text },
+      { role: 'user', display: sel.figure ? sel.figure.label : sel.text, text },
       { role: 'assistant', display: reply, text: reply }
     ]
     record = {
@@ -328,6 +332,7 @@ export function startConversation(src: ConversationSource, body: HTMLElement, de
       pageEnd: sel.pageEnd,
       quote: sel.text,
       image: imageUrl,
+      figure: sel.figure,
       sessionId: pendingSession,
       turns,
       status: 'open'

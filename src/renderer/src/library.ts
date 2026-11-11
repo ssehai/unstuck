@@ -5,6 +5,8 @@
  * backed by IndexedDB, so the app behaves the same either way.
  */
 
+import type { PaperFigure } from './figures'
+
 export interface PaperView {
   page: number
   scale: string
@@ -17,13 +19,15 @@ export interface PaperMeta {
   addedAt: number
   lastOpenedAt: number
   view?: PaperView
+  /** Figures found in the paper, with the detector version (see figures.ts). */
+  figures?: { v: number; items: PaperFigure[] }
 }
 
 export interface Library {
   list(): Promise<PaperMeta[]>
   add(name: string, data: Uint8Array): Promise<PaperMeta>
   read(id: string): Promise<Uint8Array>
-  update(id: string, patch: { lastOpenedAt?: number; view?: PaperView }): Promise<PaperMeta | null>
+  update(id: string, patch: { lastOpenedAt?: number; view?: PaperView; figures?: PaperMeta['figures'] }): Promise<PaperMeta | null>
   remove(id: string): Promise<boolean>
 }
 

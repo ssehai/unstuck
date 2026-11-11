@@ -11,6 +11,7 @@ import { StuckPoints } from './stuckPoints'
 import { getLibrary, type PaperMeta } from './library'
 import { Reader } from './reader'
 import { SelectionPopup } from './selection'
+import { extractFigures, FIGURES_VERSION, type PaperFigure } from './figures'
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T
 
@@ -280,6 +281,19 @@ popup.onHide = () => {
 const openStuck = (rec: StuckRecord): void => {
   setPanel(true)
   shownRecordId = rec.id
+  if (rec.figure) {
+    const f = rec.figure
+    const locateFigure = (): void => {
+      scrollToFigure(f)
+      if (popup.cardOpen) popup.showFigureHighlight(f)
+    }
+    popup.openSaved({ text: rec.quote, pageStart: rec.page, pageEnd: rec.pageEnd }, locateFigure, (body) => {
+      cancelExplain?.()
+      cancelExplain = startConversation({ record: rec }, body, conversationDeps())
+    })
+    locateFigure()
+    return
+  }
   // Go to the passage and show it highlighted, as when it was first selected.
   const locate = async (): Promise<void> => {
     const range = await jumpTo(reader, container, rec.page, rec.quote, { flash: false })
@@ -323,7 +337,9 @@ const reader = new Reader(container, $<HTMLDivElement>('viewer'), {
     saveViewSoon()
   },
   // pdf.js (re)created a page's text layer: put our overlays back on it.
-  onTextLayer: () => {
+  onTextLayer: (page) => {
+    // Figure targets are created once per paper; a page that didn't exist yet gets them now.
+    if (figures.some((f) => f.page === page) && !container.querySelector(`.page[data-page-number="${page}"] .figure-hit`)) renderFigureBoxes()
     popup.refreshHighlight()
     stuck.renderMarkers()
     if (pdfFind.isOpen) drawFindMarks()
@@ -348,6 +364,54 @@ function saveViewSoon(): void {
   }, 600)
 }
 
+// --- Figures: found once per paper, clickable like a selection -------------------
+let figures: PaperFigure[] = []
+
+/** Transparent click targets over each figure (in percent of the page). */
+function renderFigureBoxes(): void {
+  clearOverlays(container, 'figures')
+  for (const f of figures) {
+    const overlay = pageOverlay(container, f.page, 'figures')
+    if (!overlay) continue
+    const d = document.createElement('div')
+    d.className = 'figure-hit'
+    d.title = `${f.label} — 클릭해서 질문하기`
+    placeBox(d, { page: f.page, left: f.x, top: f.y, width: f.width, height: f.height }, 3)
+    // A drag that starts on a figure still selects text; only a click asks.
+    let down: { x: number; y: number } | null = null
+    d.addEventListener('mousedown', (e) => (down = { x: e.clientX, y: e.clientY }))
+    d.addEventListener('click', (e) => {
+      const moved = down ? Math.hypot(e.clientX - down.x, e.clientY - down.y) : 0
+      down = null
+      if (moved > 4 || e.detail > 1) return
+      popup.commitFigure(f)
+    })
+    overlay.appendChild(d)
+  }
+}
+
+function scrollToFigure(f: PaperFigure): void {
+  const pageEl = container.querySelector<HTMLElement>(`.page[data-page-number="${f.page}"]`)
+  if (!pageEl) return
+  const c = container.getBoundingClientRect()
+  const top = pageEl.getBoundingClientRect().top - c.top + container.scrollTop + pageEl.clientTop + f.y * pageEl.clientHeight
+  container.scrollTo({ top: Math.max(0, top - 60), behavior: 'smooth' })
+}
+
+/** Uses the saved figures, or finds them (first open, or after the detector changed) and saves them. */
+async function loadFigures(meta: PaperMeta): Promise<void> {
+  const saved = meta.figures?.v === FIGURES_VERSION ? meta.figures.items : null
+  figures = saved ?? []
+  renderFigureBoxes()
+  const doc = reader.document
+  if (saved || !doc) return
+  const items = await extractFigures(doc).catch(() => null)
+  if (!items || currentId !== meta.id) return
+  figures = items
+  renderFigureBoxes()
+  await library.update(meta.id, { figures: { v: FIGURES_VERSION, items } }).catch(() => undefined)
+}
+
 // --- Opening papers -------------------------------------------------------------
 async function openPaper(meta: PaperMeta, data?: Uint8Array): Promise<void> {
   try {
@@ -357,6 +421,7 @@ async function openPaper(meta: PaperMeta, data?: Uint8Array): Promise<void> {
     await reader.open(bytes, meta.view)
     currentId = meta.id
     stuck.load(meta.id)
+    void loadFigures(meta)
     fileName.textContent = meta.name
     document.title = `${meta.name} — Unstuck`
     emptyState.hidden = true
@@ -611,6 +676,7 @@ if (import.meta.env.DEV) {
       await importPdf(new Uint8Array(buf), decodeURIComponent(url.split('/').pop() ?? 'paper.pdf'))
     },
     selection: () => popup.selection,
+    figures: () => figures,
     library
   }
 }

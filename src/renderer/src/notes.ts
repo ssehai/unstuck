@@ -1,3 +1,4 @@
+import type { PaperFigure } from './figures'
 /**
  * Stuck points: every passage the reader asked about, with the conversation
  * and, once they press "Got it", a condensed note. Stored per paper (on disk
@@ -23,6 +24,8 @@ export interface StuckRecord {
   quote: string
   /** Equation image sent with the first question (data URL), if any. */
   image?: string
+  /** Set when the stuck point is a whole figure (`quote` is then its caption). */
+  figure?: PaperFigure
   sessionId?: string
   turns: StoredTurn[]
   status: 'open' | 'understood'

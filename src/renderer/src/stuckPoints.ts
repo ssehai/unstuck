@@ -166,6 +166,12 @@ export class StuckPoints {
     for (const rec of this.records) {
       if (this.spots.has(rec.id)) continue
       const pageEl = c.querySelector<HTMLElement>(`.page[data-page-number="${rec.page}"]`)
+      if (rec.figure && pageEl) {
+        // A figure's dot sits at the figure's top-left corner, sized like a body line.
+        const f = rec.figure
+        this.spots.set(rec.id, { page: f.page, top: f.y, bottom: f.y + 0.0125, left: f.x, aspect: pageEl.clientHeight / pageEl.clientWidth })
+        continue
+      }
       if (!pageEl?.querySelector('.textLayer span')) continue
       const range = findInPage(pageEl, rec.quote)
       if (!range) continue

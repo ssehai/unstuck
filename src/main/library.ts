@@ -23,6 +23,34 @@ export interface PaperMeta {
   addedAt: number
   lastOpenedAt: number
   view?: PaperView
+  /** Figures found in the paper (renderer: figures.ts), with the detector version. */
+  figures?: { v: number; items: SavedFigure[] }
+}
+
+export interface SavedFigure {
+  label: string
+  page: number
+  x: number
+  y: number
+  width: number
+  height: number
+  caption: string
+}
+
+/** Keeps only well-formed figures (the renderer is trusted, but the file is user-visible). */
+function cleanFigures(f: unknown): PaperMeta['figures'] | undefined {
+  const o = f as { v?: unknown; items?: unknown }
+  if (!o || typeof o.v !== 'number' || !Array.isArray(o.items)) return undefined
+  const num = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n)
+  const items = o.items
+    .filter((it): it is SavedFigure => {
+      const x = it as SavedFigure
+      return typeof x?.label === 'string' && typeof x.caption === 'string' && num(x.page) &&
+        num(x.x) && num(x.y) && num(x.width) && num(x.height)
+    })
+    .slice(0, 500)
+    .map((x) => ({ label: x.label.slice(0, 40), page: x.page, x: x.x, y: x.y, width: x.width, height: x.height, caption: x.caption.slice(0, 2000) }))
+  return { v: o.v, items }
 }
 
 const ID = /^[0-9a-f]{16}$/
@@ -90,13 +118,17 @@ export function registerLibrary(): void {
 
   ipcMain.handle('library:update', (_e, id: unknown, patch: unknown) => {
     if (typeof id !== 'string' || !ID.test(id) || typeof patch !== 'object' || !patch) throw new Error('Bad arguments')
-    const p = patch as Partial<Pick<PaperMeta, 'lastOpenedAt' | 'view'>>
+    const p = patch as Partial<Pick<PaperMeta, 'lastOpenedAt' | 'view' | 'figures'>>
     return mutate((list) => {
       const meta = list.find((m) => m.id === id)
       if (!meta) return null
       if (typeof p.lastOpenedAt === 'number') meta.lastOpenedAt = p.lastOpenedAt
       if (p.view && typeof p.view.page === 'number' && typeof p.view.scale === 'string') {
         meta.view = { page: p.view.page, scale: p.view.scale }
+      }
+      if (p.figures) {
+        const figures = cleanFigures(p.figures)
+        if (figures) meta.figures = figures
       }
       return meta
     })

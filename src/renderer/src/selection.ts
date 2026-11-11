@@ -2,14 +2,17 @@ import { installDragSelect } from './dragSelect'
 import { selectionBoxes, type Box } from './lineModel'
 import { clearOverlays, pageOverlay, placeBox, toPageBoxes, type PageBox } from './overlay'
 import { rangeText, snapToWords } from './textGeometry'
+import type { PaperFigure } from './figures'
 
 /** A passage the user selected in the PDF. */
 export interface StuckSelection {
   text: string
   pageStart: number
   pageEnd: number
-  /** The snapped DOM range (renderer-only; used e.g. to capture equations). */
-  range: Range
+  /** The snapped DOM range (renderer-only; used e.g. to capture equations). Absent for a figure. */
+  range?: Range
+  /** Set when a whole figure was clicked: `text` is then its caption. */
+  figure?: PaperFigure
 }
 
 const MIN_CHARS = 2
@@ -30,6 +33,8 @@ export class SelectionPopup {
   private readonly emptyHint: HTMLElement | null
   /** The asked passage's highlight, as page fractions. */
   private hl: PageBox[] = []
+  /** Whether `hl` outlines a figure rather than marking text. */
+  private hlFigure = false
   private current: StuckSelection | null = null
   /** Selected but not asked about yet. */
   private pending: { sel: StuckSelection; boxes: PageBox[] } | null = null
@@ -87,6 +92,7 @@ export class SelectionPopup {
     this.card.hidden = true
     if (this.emptyHint) this.emptyHint.hidden = false
     this.hl = []
+    this.hlFigure = false
     this.renderHighlights()
     this.current = null
   }
@@ -103,6 +109,20 @@ export class SelectionPopup {
   /** Highlights a saved passage (reopened from the stuck-point list). */
   showSavedHighlight(range: Range): void {
     this.drawHighlights(selectionBoxes(range, this.container))
+  }
+
+  /** Outlines a saved figure (reopened from a stuck point). */
+  showFigureHighlight(f: PaperFigure): void {
+    this.hl = [figureBox(f)]
+    this.hlFigure = true
+    this.renderHighlights()
+  }
+
+  /** A click on a figure: offer the "질문하기" button for the whole figure. */
+  commitFigure(f: PaperFigure): void {
+    this.draft = []
+    this.pending = { sel: { text: f.caption, pageStart: f.page, pageEnd: f.page, figure: f }, boxes: [figureBox(f)] }
+    this.renderPending()
   }
 
   /** Live highlight while dragging, already snapped to whole words. */
@@ -149,6 +169,7 @@ export class SelectionPopup {
     if (!this.card.hidden) this.onHide?.() // stop the previous explanation
     this.current = sel
     this.hl = boxes
+    this.hlFigure = !!sel.figure
     this.renderHighlights()
     this.locate = () => this.scrollToSelection()
     this.render(sel, (body) => this.onSelect?.(sel, body))
@@ -163,6 +184,7 @@ export class SelectionPopup {
     this.clearPending()
     this.current = null
     this.hl = []
+    this.hlFigure = false
     this.renderHighlights()
     this.locate = locate
     this.render(info, fill)
@@ -209,8 +231,8 @@ export class SelectionPopup {
       const overlay = pageOverlay(this.container, b.page, 'pending')
       if (!overlay) continue
       const d = document.createElement('div')
-      d.className = 'stuck-hl pending'
-      placeBox(d, b, 1)
+      d.className = this.pending?.sel.figure ? 'figure-hl pending' : 'stuck-hl pending'
+      placeBox(d, b, this.pending?.sel.figure ? 3 : 1)
       overlay.appendChild(d)
     }
     if (!this.pending || boxes.length === 0) return
@@ -221,7 +243,7 @@ export class SelectionPopup {
     const btn = document.createElement('button')
     btn.className = 'ask-btn'
     btn.innerHTML = '<span class="ask-q">?</span>질문하기'
-    btn.title = '이 구절에 대해 질문하기 (Enter)'
+    btn.title = this.pending.sel.figure ? '이 그림에 대해 질문하기 (Enter)' : '이 구절에 대해 질문하기 (Enter)'
     btn.style.left = `calc(${(last.left + last.width) * 100}% - 14px)`
     btn.style.top = `calc(${(last.top + last.height) * 100}% + 4px)`
     btn.addEventListener('mousedown', (e) => e.stopPropagation())
@@ -235,11 +257,15 @@ export class SelectionPopup {
       const overlay = pageOverlay(this.container, b.page, 'hl')
       if (!overlay) continue
       const d = document.createElement('div')
-      d.className = 'stuck-hl'
-      placeBox(d, b, 1) // a hair of breathing room around the glyphs
+      d.className = this.hlFigure ? 'figure-hl' : 'stuck-hl'
+      placeBox(d, b, this.hlFigure ? 3 : 1) // a hair of breathing room around the glyphs
       overlay.appendChild(d)
     }
   }
+}
+
+function figureBox(f: PaperFigure): PageBox {
+  return { page: f.page, left: f.x, top: f.y, width: f.width, height: f.height }
 }
 
 function pageOf(node: Node): number | null {

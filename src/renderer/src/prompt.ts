@@ -45,6 +45,16 @@ export function userPrompt(selected: string, page: number, home: Paragraph | nul
   return [`Selected passage (p.${page}):`, `"${selected}"`, where, '\nExplain this passage.'].join('\n')
 }
 
+/** The first question about a whole figure (clicked, not dragged); its image is attached. */
+export function figurePrompt(label: string, caption: string, page: number): string {
+  return [
+    `Selected figure (p.${page}): ${label}. The attached image shows the whole figure.`,
+    `Its caption: "${caption}"`,
+    '',
+    'Explain this figure: what it shows and what the reader should take from it at this point of the paper. In 예시, walk through reading one concrete point, curve or bar of the figure.'
+  ].join('\n')
+}
+
 export type FollowUpKind = 'question' | 'confusions' | 'prerequisites'
 
 /** A follow-up turn in the same conversation as the first explanation. */
@@ -100,6 +110,11 @@ At most 4 short sentences: what the passage means in plain words.
 One small concrete example (numbers, or an everyday analogy) that makes it click, in 2–3 sentences.
 
 Write math in LaTeX: $...$ inline, $$...$$ for display.`
+
+/** Baseline for a figure: what a chatbot user would paste, a screenshot of the figure and its caption. */
+export function baselineFigurePrompt(caption: string): string {
+  return `[Screenshot of a figure from a research paper is attached.] Caption: "${caption}"\n\nExplain this figure.`
+}
 
 export function baselineUserPrompt(selected: string): string {
   return `"${selected}"\n\nExplain this passage.`
