@@ -38,7 +38,7 @@ export interface PaperFigure {
 }
 
 /** Bump when detection changes, so saved figures are found again. */
-export const FIGURES_VERSION = 8
+export const FIGURES_VERSION = 9
 
 /**
  * A caption's first line: a kind, a number ("3", "S1", "A.2", "3a", "IV"),
