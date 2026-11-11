@@ -13,6 +13,8 @@ interface Deps {
   container: HTMLElement
   store: NotesStore
   open: (rec: StuckRecord) => void
+  /** Clicking a dot: opens it, or closes it when it is already open. */
+  toggle?: (rec: StuckRecord) => void
   /** Called after a stuck point was deleted. */
   onDeleted?: (rec: StuckRecord) => void
 }
@@ -199,7 +201,7 @@ export class StuckPoints {
         height: `${h * 100}%`
       })
       m.addEventListener('mousedown', (e) => e.stopPropagation()) // not a text selection
-      m.addEventListener('click', () => this.deps.open(rec))
+      m.addEventListener('click', () => (this.deps.toggle ?? this.deps.open)(rec))
       m.addEventListener('contextmenu', (e) => {
         e.preventDefault()
         e.stopPropagation()

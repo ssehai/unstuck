@@ -301,6 +301,11 @@ const stuck = new StuckPoints({
   container,
   store: notesStore,
   open: openStuck,
+  // A dot toggles its conversation: a second click closes it again.
+  toggle: (rec) => {
+    if (shownRecordId === rec.id && popup.cardOpen) popup.hide()
+    else openStuck(rec)
+  },
   // Deleting the stuck point that is open in the panel closes the panel.
   onDeleted: (rec) => {
     if (shownRecordId === rec.id) popup.hide()
