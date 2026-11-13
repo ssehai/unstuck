@@ -205,7 +205,6 @@ API usage is billed separately from a Claude subscription (pay as you go).
 3. Run `npm run dev` as usual.
 
 The app has no field for the key: it reads it only from the environment and never writes it to disk.
-Never commit your API key.
 
 ## Where data is stored
 
