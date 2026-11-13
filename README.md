@@ -100,7 +100,7 @@ Details are in the technical report.
 - One LLM backend:
   - **Claude Code CLI**, logged in (default; setup below). Unstuck calls it with `claude -p` and uses your
     Claude subscription.
-  - **or** an **Anthropic API key** (see [Configuration](#configuration)).
+  - **or** an **Anthropic API key** (see [Using an API key](#using-an-anthropic-api-key-instead-of-the-cli)).
 
 ### Setting up the Claude Code CLI
 
@@ -158,6 +158,24 @@ app; quit with ⌘Q in the app or Ctrl+C in the terminal. To build once and run 
 npm run build && npm start
 ```
 
+### As a Mac app
+
+To use Unstuck from the Dock like any other app, build `Unstuck.app`:
+
+```bash
+npm run dist
+```
+
+The app appears in `dist/mac-arm64/` (`dist/mac/` on Intel Macs); drag it to *Applications*. It is signed only
+ad hoc, so the first time (and after each rebuild) **right-click → Open** and confirm. After changing the code,
+run `npm run dist` again and replace the app.
+
+- The app and `npm run dev` share the same library, notes and settings.
+- Only one of them can run at a time (two copies would overwrite each other's notes). If one is open, the
+  other says *"Unstuck is already running"* and quits.
+- An app opened from the Dock does not see your terminal's environment variables, so set the backend, model
+  and API key in **Preferences** (⌘,).
+
 ## Usage
 
 1. **Open a paper**: click *Open PDF* (⌘O) or drag a PDF onto the window. It is copied into the local
@@ -196,18 +214,21 @@ Multi-Agent Games* (MAPPO), [arXiv:2103.01955](https://arxiv.org/abs/2103.01955)
 
 ## Configuration
 
-Environment variables, set before `npm run dev`:
+Open **Preferences** (⌘,) to choose:
+
+- **Backend**: Claude Code CLI (your Claude subscription, default) or Anthropic API key (pay as you go)
+- **Model**: Sonnet (default), Opus or Haiku. Notes are always written with Haiku.
+- **API key** (API backend only): saved encrypted with the macOS Keychain, never in plain text
+
+Changes apply from the next question. For development, environment variables set before `npm run dev`
+override these settings (Preferences shows when one does):
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `UNSTUCK_BACKEND` | `cli` | `api` to call the Anthropic Messages API instead of the Claude CLI |
-| `ANTHROPIC_API_KEY` | – | Required when `UNSTUCK_BACKEND=api` |
+| `ANTHROPIC_API_KEY` | – | API key for the `api` backend |
 | `UNSTUCK_MODEL` | `sonnet` | Model for explanations (CLI alias or full model id) |
 | `UNSTUCK_CLAUDE_BIN` | auto | Path to the `claude` binary if it is not found automatically |
-
-```bash
-UNSTUCK_BACKEND=api ANTHROPIC_API_KEY=sk-ant-... npm run dev
-```
 
 ### Using an Anthropic API key instead of the CLI
 
@@ -215,16 +236,8 @@ API usage is billed separately from a Claude subscription (pay as you go).
 
 1. Sign in at <https://console.anthropic.com>, add a payment method or credits under **Billing**, and create
    a key under **API Keys**. It starts with `sk-ant-`; copy it, since it is shown only once.
-2. To avoid typing it every time, add these two lines to `~/.zshrc`, then open a new terminal:
-
-   ```bash
-   export UNSTUCK_BACKEND=api
-   export ANTHROPIC_API_KEY=sk-ant-...
-   ```
-
-3. Run `npm run dev` as usual.
-
-The app has no field for the key: it reads it only from the environment and never writes it to disk.
+2. In Unstuck, open **Preferences** (⌘,), choose **Anthropic API 키**, paste the key and press **저장** (Save).
+   It is stored encrypted with the macOS Keychain; **삭제** (Delete) removes it.
 
 ## Troubleshooting
 
@@ -233,8 +246,10 @@ The app has no field for the key: it reads it only from the environment and neve
 | `npm install` fails, or `node: command not found` | Install Node.js 22.18+ (see [Requirements](#requirements)) and open a new terminal. |
 | *Claude CLI is not logged in…* in the panel | Run `claude` in a terminal, sign in, then ask again. |
 | *The `claude` command was not found…* | Check `claude --version`; if it works in the terminal, start the app with `UNSTUCK_CLAUDE_BIN="$(which claude)" npm run dev`. |
-| *ANTHROPIC_API_KEY is not set…* | Quit the app, set the key in the terminal (see [Using an API key](#using-an-anthropic-api-key-instead-of-the-cli)), and run `npm run dev` again. |
-| *The API key was rejected (401)* | The key is wrong or was revoked; create a new one in the Console. |
+| *No Anthropic API key is set…* | Add the key in Preferences (⌘,), or switch the backend to the Claude CLI. |
+| *The API key was rejected (401)…* | The key is wrong or was revoked; create a new one in the Console and save it in Preferences. |
+| *Unstuck is already running* | Quit the other copy (the app or `npm run dev`) first. |
+| macOS says the app *can't be opened* | Right-click `Unstuck.app` → Open, then confirm. |
 | A usage-limit or rate-limit message | Your Claude plan's limit or API credit is used up; wait or add credit. |
 | Selecting text does nothing | The PDF may be a scan without a text layer, which Unstuck cannot read. |
 
@@ -248,6 +263,7 @@ Everything stays on your machine, under `~/Library/Application Support/unstuck/`
 | `library/notes/<paper>.json` | Stuck points, conversations, and notes |
 | `evaluation/results.jsonl` | Evaluation-mode ratings |
 | `claude-sessions/` | Working directory for the Claude CLI (conversation sessions for follow-ups) |
+| `settings.json` | Preferences: backend, model, and the API key encrypted with the Keychain |
 
 The paper's text and your selection are sent to Claude (Anthropic) to generate answers.
 
@@ -292,6 +308,7 @@ The evaluation procedure is described in [docs/evaluation-protocol.md](docs/eval
 | Path | Role |
 |---|---|
 | `src/main/llm.ts` | Swappable backend: Claude CLI (default) or Anthropic API, streamed to the renderer |
+| `src/main/settings.ts`, `src/renderer/src/preferences.ts` | Preferences: backend, model, encrypted API key |
 | `src/main/library.ts`, `notes.ts`, `evaluation.ts` | Local storage over IPC |
 | `src/renderer/src/reader.ts` | pdf.js viewer, zoom, find |
 | `src/renderer/src/lineModel.ts`, `textGeometry.ts`, `dragSelect.ts` | Glyph-aligned word selection |
@@ -313,7 +330,7 @@ prompt so that follow-ups reuse the prompt cache.
   PDFs without a text layer do not work.
 - Very long papers are truncated to about 120k characters of context.
 - Each answer takes a few seconds (median ~6 s) and uses your Claude subscription or API credit.
-- Not yet packaged as a standalone `.app`; run it from source.
+- The Mac app is built locally (`npm run dist`) and signed only ad hoc; there is no notarized download.
 
 ## Acknowledgements
 

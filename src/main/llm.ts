@@ -6,7 +6,9 @@
  *    lets us send images and stream the answer token by token.
  *  - "api": calls the Anthropic Messages API with ANTHROPIC_API_KEY.
  *
- * Pick with UNSTUCK_BACKEND=cli|api. Model with UNSTUCK_MODEL.
+ * Chosen in Preferences (settings.ts); UNSTUCK_BACKEND / UNSTUCK_MODEL /
+ * ANTHROPIC_API_KEY override it. Read on every request, so a change applies
+ * to the next question without restarting.
  * Both keep a conversation per session id, so follow-up questions (M3) can
  * continue the same thread.
  */
@@ -16,6 +18,7 @@ import { existsSync, mkdirSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
+import { apiKey, backendName, modelName } from './settings'
 
 export interface ExplainRequest {
   id: string
@@ -76,7 +79,6 @@ function findClaude(): string {
 
 class ClaudeCliBackend implements Backend {
   private readonly bin = findClaude()
-  private readonly model = process.env['UNSTUCK_MODEL'] || 'sonnet'
 
   run(req: ExplainRequest, emit: Emit): { cancel(): void } {
     // A dedicated, empty working directory: no project CLAUDE.md, and the
@@ -90,7 +92,7 @@ class ClaudeCliBackend implements Backend {
       '--output-format', 'stream-json',
       '--verbose',
       '--include-partial-messages',
-      '--model', req.model || this.model,
+      '--model', req.model || modelName(),
       '--tools', '', // pure reasoning: no file or shell access
       '--setting-sources', '', // ignore the user's hooks/plugins/output styles
       '--strict-mcp-config', // and their MCP servers
@@ -188,18 +190,17 @@ const API_MODELS: Record<string, string> = {
 }
 
 class AnthropicApiBackend implements Backend {
-  private readonly model = process.env['UNSTUCK_MODEL'] || 'claude-sonnet-5-5'
   private readonly history = new Map<string, { role: 'user' | 'assistant'; content: ContentBlock[] | string }[]>()
 
   run(req: ExplainRequest, emit: Emit): { cancel(): void } {
-    const key = process.env['ANTHROPIC_API_KEY']
+    const key = apiKey()
     const controller = new AbortController()
     if (!key) {
       // `auth` is the CLI's "not logged in" hint, so API-mode errors say what to fix themselves.
       emit({
         id: req.id,
         kind: 'error',
-        message: 'ANTHROPIC_API_KEY is not set. Quit the app, set it in the terminal, and run `npm run dev` again.'
+        message: 'No Anthropic API key is set. Add one in Preferences (⌘,), or switch the backend to the Claude CLI.'
       })
       return { cancel: () => undefined }
     }
@@ -214,7 +215,7 @@ class AnthropicApiBackend implements Backend {
           signal: controller.signal,
           headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
           body: JSON.stringify({
-            model: req.model ? API_MODELS[req.model] ?? req.model : this.model,
+            model: API_MODELS[req.model || modelName()] ?? req.model ?? modelName(),
             max_tokens: 2048,
             stream: true,
             // The paper is in the system prompt and reused across questions.
@@ -226,7 +227,7 @@ class AnthropicApiBackend implements Backend {
           const body = await res.text()
           const message =
             res.status === 401
-              ? 'The API key was rejected (401). Check ANTHROPIC_API_KEY.'
+              ? 'The API key was rejected (401). Check the key in Preferences (⌘,).'
               : `API error ${res.status}: ${body.slice(0, 300)}`
           emit({ id: req.id, kind: 'error', message })
           return
@@ -267,7 +268,7 @@ class AnthropicApiBackend implements Backend {
 // --- IPC ---------------------------------------------------------------------------
 
 export function registerLlm(): void {
-  const backend: Backend = process.env['UNSTUCK_BACKEND'] === 'api' ? new AnthropicApiBackend() : new ClaudeCliBackend()
+  const backends: Record<'cli' | 'api', Backend> = { cli: new ClaudeCliBackend(), api: new AnthropicApiBackend() }
   const running = new Map<string, { cancel(): void }>()
 
   ipcMain.handle('llm:explain', (e, req: ExplainRequest) => {
@@ -279,7 +280,7 @@ export function registerLlm(): void {
       if (ev.kind !== 'delta') running.delete(ev.id)
       if (!sender.isDestroyed()) sender.send('llm:event', ev)
     }
-    running.set(req.id, backend.run(req, emit))
+    running.set(req.id, backends[backendName()].run(req, emit))
     return true
   })
 

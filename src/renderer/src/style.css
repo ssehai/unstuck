@@ -1306,6 +1306,89 @@ body.eval-mode .sp-composer {
   cursor: pointer;
 }
 
+.prefs-form {
+  display: grid;
+  gap: 12px;
+}
+
+.prefs-form fieldset {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.prefs-form legend {
+  font-weight: 600;
+  margin-bottom: 6px;
+  padding: 0;
+}
+
+.prefs-form label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.prefs-row > span:first-child {
+  width: 52px;
+  flex: none;
+  font-weight: 600;
+}
+
+.prefs-row select,
+.prefs-row input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: inherit;
+}
+
+.prefs-key {
+  display: grid;
+  gap: 6px;
+}
+
+.prefs-key[hidden] {
+  display: none;
+}
+
+.prefs-key-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.prefs-key-status {
+  flex: 1;
+  font-size: 12px;
+}
+
+.prefs-key-actions button {
+  font: inherit;
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.prefs-key-actions .prefs-key-save {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.prefs-form p {
+  margin: 0;
+  font-size: 12px;
+}
+
 /* ---------- Find bars (⌘F / ⌘⇧F) ---------- */
 .find-bar {
   position: absolute;

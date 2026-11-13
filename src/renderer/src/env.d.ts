@@ -7,6 +7,7 @@ interface Window {
     llm: import('./llm').LlmBridge
     notes: import('./notes').NotesStore
     evaluation: import('./evaluation').EvalStore
+    settings?: import('./preferences').SettingsBridge
     onMenu?: (cb: (command: string) => void) => () => void
   }
 }

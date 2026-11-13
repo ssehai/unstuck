@@ -9,18 +9,34 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "try": "node --no-warnings scripts/try-explain.mts"
+    "try": "node --no-warnings scripts/try-explain.mts",
+    "dist": "electron-vite build && electron-builder --mac --dir"
   },
   "devDependencies": {
     "@types/katex": "^0.16.7",
     "@types/node": "^22.10.2",
     "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
+    "katex": "^0.16.11",
+    "pdfjs-dist": "^4.8.69",
     "typescript": "^5.6.3",
     "vite": "^5.4.11"
   },
-  "dependencies": {
-    "katex": "^0.16.11",
-    "pdfjs-dist": "^4.8.69"
+  "build": {
+    "appId": "io.github.ssehai.unstuck",
+    "productName": "Unstuck",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.education",
+      "target": "dir",
+      "identity": null
+    },
+    "afterSign": "scripts/adhoc-sign.cjs"
   }
 }

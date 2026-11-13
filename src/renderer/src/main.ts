@@ -1,3 +1,4 @@
+import { setupPreferences } from './preferences'
 import './style.css'
 import { startConversation } from './explainUi'
 import { getEvalStore, startEvaluation } from './evaluation'
@@ -227,10 +228,11 @@ try {
 }
 
 // --- Preferences (app menu, ⌘,) ------------------------------------------------------
-// Nothing to configure yet; the window is the place for future settings.
 const prefs = $('prefsDialog')
+const preferences = setupPreferences(prefs)
 function openPreferences(): void {
   prefs.hidden = false
+  void preferences.refresh()
 }
 prefs.addEventListener('mousedown', (e) => {
   if (e.target === prefs) prefs.hidden = true // click on the backdrop

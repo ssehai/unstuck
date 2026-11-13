@@ -25,6 +25,10 @@ contextBridge.exposeInMainWorld('unstuckApi', {
     list: () => ipcRenderer.invoke('eval:list'),
     reveal: () => ipcRenderer.invoke('eval:reveal')
   },
+  settings: {
+    get: () => ipcRenderer.invoke('settings:get'),
+    set: (patch: object) => ipcRenderer.invoke('settings:set', patch)
+  },
   llm: {
     explain: (req: object) => ipcRenderer.invoke('llm:explain', req),
     cancel: (id: string) => ipcRenderer.invoke('llm:cancel', id),

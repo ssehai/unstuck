@@ -39,7 +39,34 @@
           <span>Preferences</span>
           <button class="prefs-close" title="Close (Esc)">×</button>
         </div>
-        <p class="muted">설정할 항목이 아직 없어요. 패널 글자 크기는 View 메뉴(⌘⇧+ / ⌘⇧−)에 있어요.</p>
+        <form class="prefs-form" autocomplete="off">
+          <fieldset>
+            <legend>답변을 만드는 방식</legend>
+            <label><input type="radio" name="backend" value="cli" /> Claude Code CLI <span class="muted">(내 Claude 구독)</span></label>
+            <label><input type="radio" name="backend" value="api" /> Anthropic API 키 <span class="muted">(사용량만큼 과금)</span></label>
+          </fieldset>
+          <label class="prefs-row">
+            <span>모델</span>
+            <select name="model">
+              <option value="sonnet">Sonnet (기본)</option>
+              <option value="opus">Opus (더 강력, 더 느림)</option>
+              <option value="haiku">Haiku (더 빠름)</option>
+            </select>
+          </label>
+          <div class="prefs-key" hidden>
+            <label class="prefs-row">
+              <span>API 키</span>
+              <input name="apiKey" type="password" placeholder="sk-ant-…" spellcheck="false" />
+            </label>
+            <div class="prefs-key-actions">
+              <span class="prefs-key-status muted"></span>
+              <button type="button" class="prefs-key-delete">삭제</button>
+              <button type="submit" class="prefs-key-save">저장</button>
+            </div>
+          </div>
+          <p class="prefs-env muted" hidden></p>
+          <p class="muted">바꾼 설정은 다음 질문부터 적용돼요. 패널 글자 크기는 View 메뉴(⌘⇧+ / ⌘⇧−)에 있어요.</p>
+        </form>
       </div>
     </div>
 
