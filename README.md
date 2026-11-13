@@ -18,6 +18,22 @@ Stuck points appear as dots in the page and as a list in the panel, so you can c
 Built for CSE554 Advanced Data Mining (UNIST, Fall 2026), Assignment #2: *"AI for My Research: Build Something
 You Would Actually Use."* Answers are in Korean, with technical terms kept in English.
 
+**Quick start** (macOS; each step is explained under [Requirements](#requirements)):
+
+1. Install [Node.js](https://nodejs.org) 22.18 or later.
+2. Install the Claude Code CLI and log in once ([Setting up the Claude Code CLI](#setting-up-the-claude-code-cli)),
+   or get an Anthropic API key ([Using an API key](#using-an-anthropic-api-key-instead-of-the-cli)).
+3. In a terminal:
+
+   ```bash
+   git clone https://github.com/ssehai/unstuck.git
+   cd unstuck
+   npm install
+   npm run dev
+   ```
+
+4. Open a paper PDF in the window, select a passage, and press **? 질문하기**.
+
 ---
 
 ## Why not just paste the passage into a chatbot?
@@ -77,7 +93,10 @@ Details are in the technical report.
 ## Requirements
 
 - **macOS** (developed and tested on macOS; Electron should also run on Windows and Linux, but this is untested)
-- **Node.js 22.18+** (the helper scripts run TypeScript directly; the app itself needs Node 18+)
+- **Node.js 22.18+** (the helper scripts run TypeScript directly; the app itself needs Node 18+).
+  Install the LTS version from <https://nodejs.org> (or `brew install node`), then check it in a new terminal
+  with `node --version`.
+- **git**. If it is missing, macOS offers to install it (Command Line Tools) the first time you run `git`.
 - One LLM backend:
   - **Claude Code CLI**, logged in (default; setup below). Unstuck calls it with `claude -p` and uses your
     Claude subscription.
@@ -132,7 +151,8 @@ npm install
 npm run dev
 ```
 
-This opens the app window. To build once and run the build instead:
+This opens the app window (the first start takes a few seconds). Keep the terminal open while you use the
+app; quit with ⌘Q in the app or Ctrl+C in the terminal. To build once and run the build instead:
 
 ```bash
 npm run build && npm start
@@ -205,6 +225,18 @@ API usage is billed separately from a Claude subscription (pay as you go).
 3. Run `npm run dev` as usual.
 
 The app has no field for the key: it reads it only from the environment and never writes it to disk.
+
+## Troubleshooting
+
+| Message or symptom | What to do |
+|---|---|
+| `npm install` fails, or `node: command not found` | Install Node.js 22.18+ (see [Requirements](#requirements)) and open a new terminal. |
+| *Claude CLI is not logged in…* in the panel | Run `claude` in a terminal, sign in, then ask again. |
+| *The `claude` command was not found…* | Check `claude --version`; if it works in the terminal, start the app with `UNSTUCK_CLAUDE_BIN="$(which claude)" npm run dev`. |
+| *ANTHROPIC_API_KEY is not set…* | Quit the app, set the key in the terminal (see [Using an API key](#using-an-anthropic-api-key-instead-of-the-cli)), and run `npm run dev` again. |
+| *The API key was rejected (401)* | The key is wrong or was revoked; create a new one in the Console. |
+| A usage-limit or rate-limit message | Your Claude plan's limit or API credit is used up; wait or add credit. |
+| Selecting text does nothing | The PDF may be a scan without a text layer, which Unstuck cannot read. |
 
 ## Where data is stored
 

@@ -195,7 +195,12 @@ class AnthropicApiBackend implements Backend {
     const key = process.env['ANTHROPIC_API_KEY']
     const controller = new AbortController()
     if (!key) {
-      emit({ id: req.id, kind: 'error', message: 'ANTHROPIC_API_KEY is not set.', auth: true })
+      // `auth` is the CLI's "not logged in" hint, so API-mode errors say what to fix themselves.
+      emit({
+        id: req.id,
+        kind: 'error',
+        message: 'ANTHROPIC_API_KEY is not set. Quit the app, set it in the terminal, and run `npm run dev` again.'
+      })
       return { cancel: () => undefined }
     }
     const sessionId = req.sessionId ?? randomUUID()
@@ -219,7 +224,11 @@ class AnthropicApiBackend implements Backend {
         })
         if (!res.ok || !res.body) {
           const body = await res.text()
-          emit({ id: req.id, kind: 'error', message: `API error ${res.status}: ${body.slice(0, 300)}`, auth: res.status === 401 })
+          const message =
+            res.status === 401
+              ? 'The API key was rejected (401). Check ANTHROPIC_API_KEY.'
+              : `API error ${res.status}: ${body.slice(0, 300)}`
+          emit({ id: req.id, kind: 'error', message })
           return
         }
         const reader = res.body.getReader()
