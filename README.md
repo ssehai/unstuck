@@ -79,9 +79,44 @@ Details are in the technical report.
 - **macOS** (developed and tested on macOS; Electron should also run on Windows and Linux, but this is untested)
 - **Node.js 22.18+** (the helper scripts run TypeScript directly; the app itself needs Node 18+)
 - One LLM backend:
-  - **Claude Code CLI**, logged in (default). Install it from <https://docs.claude.com/en/docs/claude-code>,
-    run `claude` once, and log in with `/login`. Unstuck calls it with `claude -p` and uses your Claude subscription.
+  - **Claude Code CLI**, logged in (default; setup below). Unstuck calls it with `claude -p` and uses your
+    Claude subscription.
   - **or** an **Anthropic API key** (see [Configuration](#configuration)).
+
+### Setting up the Claude Code CLI
+
+You need a Claude **Pro, Max, Team or Enterprise** subscription, or an Anthropic **Console** account
+(the free claude.ai plan does not include Claude Code). Full instructions:
+<https://code.claude.com/docs/en/setup>.
+
+1. **Install** (macOS; Homebrew users can run `brew install --cask claude-code` instead):
+
+   ```bash
+   curl -fsSL https://claude.ai/install.sh | bash
+   ```
+
+2. Open a **new** terminal window and check that it is installed. This prints a version number:
+
+   ```bash
+   claude --version
+   ```
+
+3. **Log in** once: run `claude`, follow the browser prompts to sign in, then quit with `/exit`.
+
+4. **Check** that it answers without the interactive screen, which is how Unstuck calls it:
+
+   ```bash
+   claude -p "hi"
+   ```
+
+   If this prints a reply, Unstuck is ready to use.
+
+If Unstuck shows *"The `claude` command was not found"*, it looked in `~/.local/bin`, `/opt/homebrew/bin` and
+`/usr/local/bin` without finding it. Start the app with the path set explicitly:
+
+```bash
+UNSTUCK_CLAUDE_BIN="$(which claude)" npm run dev
+```
 
 ## Installation
 
