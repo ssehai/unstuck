@@ -189,7 +189,23 @@ Environment variables, set before `npm run dev`:
 UNSTUCK_BACKEND=api ANTHROPIC_API_KEY=sk-ant-... npm run dev
 ```
 
-Never commit your API key. It is read only from the environment.
+### Using an Anthropic API key instead of the CLI
+
+API usage is billed separately from a Claude subscription (pay as you go).
+
+1. Sign in at <https://console.anthropic.com>, add a payment method or credits under **Billing**, and create
+   a key under **API Keys**. It starts with `sk-ant-`; copy it, since it is shown only once.
+2. To avoid typing it every time, add these two lines to `~/.zshrc`, then open a new terminal:
+
+   ```bash
+   export UNSTUCK_BACKEND=api
+   export ANTHROPIC_API_KEY=sk-ant-...
+   ```
+
+3. Run `npm run dev` as usual.
+
+The app has no field for the key: it reads it only from the environment and never writes it to disk.
+Never commit your API key.
 
 ## Where data is stored
 
